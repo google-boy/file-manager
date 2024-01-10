@@ -107,6 +107,17 @@
       v-model="showShareDialog"
       :entity-name="shareName"
       @success="folderContents.fetch()" />
+    <MoveDialog
+      v-if="showMoveDialog"
+      v-model="showMoveDialog"
+      :entity-name="selectedEntities[0].name"
+      @success="
+        () => {
+          folderContents.fetch();
+          showMoveDialog = false;
+          selectedEntities = [];
+        }
+      " />
   </div>
 </template>
 
@@ -123,6 +134,7 @@ import FolderContentsError from "@/components/FolderContentsError.vue";
 import EntityContextMenu from "@/components/EntityContextMenu.vue";
 import EmptyEntityContextMenu from "@/components/EmptyEntityContextMenu.vue";
 import { formatSize, formatDate } from "@/utils/format";
+import MoveDialog from "@/components/MoveDialog.vue";
 import {
   folderDownload,
   selectedEntitiesDownload,
@@ -175,6 +187,7 @@ export default {
     FolderUp,
     FileUp,
     FileText,
+    MoveDialog,
   },
   props: {
     entityName: {
@@ -190,6 +203,7 @@ export default {
     showRenameDialog: false,
     showShareDialog: false,
     showRemoveDialog: false,
+    showMoveDialog: false,
     showUnshareDialog: false,
     showEntityContext: false,
     showEmptyEntityContextMenu: false,
@@ -374,13 +388,10 @@ export default {
             },
           },
           {
-            label: "Cut",
+            label: "Move",
             icon: FolderInput,
             onClick: () => {
-              this.$store.commit("setPasteData", {
-                entities: this.selectedEntities.map((x) => x.name),
-                action: "cut",
-              });
+              this.showMoveDialog = true;
             },
             isEnabled: () => {
               return (
@@ -937,6 +948,11 @@ export default {
           field: "file_size",
           sortable: true,
         },
+        {
+          label: "Type",
+          field: "mime_type",
+          sortable: true,
+        },
       ].filter((item) => item.sortable);
     },
   },
@@ -1105,6 +1121,17 @@ export default {
           this.$store.commit("setCurrentFolder", data);
           this.folderContents.fetch();
         },
+        onError(error) {
+          if (error && error.exc_type === "PermissionError") {
+            this.$store.commit("setError", {
+              iconName: "alert-triangle",
+              iconClass: "fill-amber-500 stroke-white",
+              primaryMessage: "Forbidden",
+              secondaryMessage: "Insufficient permissions for this resource",
+            });
+          }
+          this.$router.replace({ name: "Error" });
+        },
         auto: true,
       };
     },
@@ -1166,6 +1193,15 @@ export default {
             entity.owner = entity.owner === this.userId ? "Me" : entity.owner;
             this.$store.commit("setCurrentViewEntites", data);
           });
+        },
+        onError(error) {
+          if (error && error.exc_type === "PermissionError") {
+            this.$store.commit("setError", {
+              primaryMessage: "Forbidden",
+              secondaryMessage: "Insufficient permissions for this resource",
+            });
+            this.$router.replace({ name: "Error" });
+          }
         },
         auto: false,
       };

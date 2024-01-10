@@ -1,5 +1,6 @@
 import frappe
 import os
+import re
 from frappe.utils.nestedset import rebuild_tree, get_ancestors_of
 from pypika import Order, Field, functions as fn
 from pathlib import Path
@@ -23,6 +24,7 @@ from datetime import date, timedelta
 import magic
 from datetime import datetime
 import urllib.parse
+
 
 def if_folder_exists(folder_name, parent):
     values = {
@@ -315,19 +317,6 @@ def get_file_content(entity_name, trigger_download=0):
         raise ValueError
 
     with DistributedLock(drive_entity.path, exclusive=False):
-        range_header = frappe.request.headers.get("Range")
-        # if range_header is not None:
-        # h = range_header.replace("bytes=", "").split("-")
-        # print (h)
-        # start = int(h[0]) if h[0] != "" else 0
-        # end = int(h[1]) if h[1] != "" else file_size - 1
-        # start, end = get_range_header(range_header, file_size)
-        # size = end - start + 1
-        # print (size)
-        # response.headers.add("Content-Range", f"bytes {start}-{end}/{drive_entity.file_size}")
-        # status_code = status.HTTP_206_PARTIAL_CONTENT
-        # Figure out a sane way to handle blob range streaming requests
-
         try:
             file = open(drive_entity.path, "rb")
         except TypeError:
@@ -346,7 +335,48 @@ def get_file_content(entity_name, trigger_download=0):
         response.headers.add("Content-Length", str(drive_entity.file_size))
         response.headers.add("Content-Type", response.mimetype)
         response.headers.add("Accept-Range", "bytes")
+
+        range_header = frappe.request.headers.get("Range", None)
+        if range_header:
+            return stream_file_content(drive_entity, range_header)
+
         return response
+
+
+def stream_file_content(drive_entity, range_header):
+    """
+    Stream file content and optionally trigger download
+
+    :param entity_name: Document-name of the file whose content is to be streamed
+    :param drive_entity: Drive Entity record object
+    """
+
+    # range_header = frappe.request.headers.get("Range", None)
+    size = os.path.getsize(drive_entity.path)
+    byte1, byte2 = 0, None
+
+    m = re.search("(\d+)-(\d*)", range_header)
+    g = m.groups()
+
+    if g[0]:
+        byte1 = int(g[0])
+    if g[1]:
+        byte2 = int(g[1])
+
+    length = size - byte1
+    if byte2 is not None:
+        length = byte2 - byte1
+
+    data = None
+    with open(drive_entity.path, "rb") as f:
+        f.seek(byte1)
+        data = f.read(length)
+
+    res = Response(
+        data, 206, mimetype=mimetypes.guess_type(drive_entity.path)[0], direct_passthrough=True
+    )
+    res.headers.add("Content-Range", "bytes {0}-{1}/{2}".format(byte1, byte1 + length - 1, size))
+    return res
 
 
 @frappe.whitelist(allow_guest=True)
@@ -586,66 +616,6 @@ def get_entity(entity_name, fields=None):
     """
     fields = fields or ["name", "title", "owner"]
     return frappe.db.get_value("Drive Entity", entity_name, fields, as_dict=1)
-
-
-@frappe.whitelist()
-def get_entities_in_path(entity_name, fields=None, shared=False):
-    """
-    Return list of all DriveEntities present in the path.
-
-    :param entity_name: Document-name of the file or folder
-    :param fields: List of doc-fields that should be returned. Defaults to ['name', 'title', 'owner']
-    :param shared: True if entity in question has been shared with the user
-    :raises PermissionError: If the user does not have access to the specified entity
-    :return: List of parents followed by the specified DriveEntity
-    :rtype: list[frappe._dict]
-    """
-
-    fields = fields or ["name", "title", "owner"]
-    rebuild_tree("Drive Entity", "parent_drive_entity")
-    if not frappe.has_permission(
-        doctype="Drive Entity", doc=entity_name, ptype="read", user=frappe.session.user
-    ):
-        frappe.throw("Cannot access path due to insufficient permissions", frappe.PermissionError)
-    path = get_ancestors_of("Drive Entity", entity_name, "lft asc")
-    path.append(entity_name)
-    entities = [
-        frappe.db.get_value("Drive Entity", entity, fields, as_dict=True) for entity in path
-    ]
-
-    if entities[0].owner != frappe.session.user:
-        return get_shared_entities_in_path(entities)
-
-    result = {"is_shared": False, "entities": []}
-    result["entities"] += entities
-    return result
-
-
-@frappe.whitelist()
-def get_shared_entities_in_path(entities):
-    """
-    Return list of all DriveEntities present in the path for a shared folder.
-
-    :param entities: All entities in path
-    :return: List of parents followed by the specified DriveEntity
-    :rtype: list[frappe._dict]
-    """
-
-    shared_entities = [entities[-1]]
-    highest_level_reached = False
-    i = -2
-    while not highest_level_reached:
-        if frappe.db.exists(
-            "DocShare", {"user": frappe.session.user, "share_name": entities[i].name}
-        ) or frappe.db.exists("DocShare", {"everyone": 1, "share_name": entities[i].name}):
-            shared_entities.insert(0, entities[i])
-            i -= 1
-        else:
-            highest_level_reached = True
-
-    result = {"is_shared": True, "entities": []}
-    result["entities"] += shared_entities
-    return result
 
 
 @frappe.whitelist(allow_guest=True)
@@ -1100,3 +1070,35 @@ def get_title(entity_name):
     ):
         frappe.throw("Not permitted", frappe.PermissionError)
     return frappe.db.get_value("Drive Entity", entity_name, "title")
+
+
+@frappe.whitelist()
+def move(entity_names, new_parent=None):
+    """
+    Move file or folder to the new parent folder
+
+    :param new_parent: Document-name of the new parent folder. Defaults to the user directory
+    :raises NotADirectoryError: If the new_parent is not a folder, or does not exist
+    :raises FileExistsError: If a file or folder with the same name already exists in the specified parent folder
+    :return: DriveEntity doc once file is moved
+    """
+
+    if isinstance(entity_names, str):
+        entity_names = json.loads(entity_names)
+    if not isinstance(entity_names, list):
+        frappe.throw(f"Expected list but got {type(entity_names)}", ValueError)
+    for entity in entity_names:
+        doc = frappe.get_doc("Drive Entity", entity)
+        new_parent = new_parent or get_user_directory(doc.owner).name
+        if new_parent == doc.parent_drive_entity:
+            return doc
+        is_group = frappe.db.get_value("Drive Entity", new_parent, "is_group")
+        if not is_group:
+            raise NotADirectoryError()
+        doc.parent_drive_entity = new_parent
+        title = get_new_title(doc.title, new_parent)
+        if title != doc.title:
+            doc.rename(title)
+        doc.inherit_permissions()
+        doc.save()
+    return

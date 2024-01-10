@@ -1,25 +1,26 @@
 <template>
   <div
-    class="h-full w-full overflow-hidden flex flex-col items-center justify-center">
+    class="h-full w-full overflow-hidden flex flex-col items-center justify-start">
     <div
       :draggable="false"
       id="renderContainer"
-      class="flex items-center justify-center h-full w-full min-h-[85vh] max-h-[85vh]">
+      class="flex items-center justify-center h-full w-full min-h-[85vh] max-h-[85vh] mt-3">
       <FileRender v-if="file.data" :preview-entity="file.data" />
     </div>
     <div
-      class="flex items-center justify-between mt-4 p-2 h-10 rounded-lg shadow-xl bg-white">
+      v-show="filteredEntities.length > 1"
+      class="absolute bottom-[-1%] left-[50%] center-transform flex items-center justify-center p-1 gap-1 h-10 rounded-lg shadow-xl bg-white">
       <Button
         :disabled="!prevEntity?.name"
         :variant="'ghost'"
         icon="arrow-left"
         @click="scrollEntity(true)"></Button>
-      <!-- <Button :variant="'ghost'">
-        <Scan class="w-4"/>
+      <Button @click="enterFullScreen" :variant="'ghost'">
+        <Scan class="w-4" />
       </Button>
-      <Button :variant="'ghost'">
-        <FileSignature class="w-4"/>
-      </Button> -->
+      <!--  <Button :variant="'ghost'">
+      <FileSignature class="w-4"/>
+    </Button> -->
       <Button
         :disabled="!nextEntity?.name"
         :variant="'ghost'"
@@ -38,6 +39,7 @@ import { createResource } from "frappe-ui";
 import { formatSize, formatDate } from "@/utils/format";
 import { useRouter } from "vue-router";
 import { Scan, FileSignature } from "lucide-vue-next";
+import { onKeyStroke } from "@vueuse/core";
 
 const router = useRouter();
 const store = useStore();
@@ -83,6 +85,32 @@ function fetchFile(currentEntity) {
   });
 }
 
+function enterFullScreen(id) {
+  let elem = document.getElementById("renderContainer");
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen();
+  } else if (elem.mozRequestFullScreen) {
+    /* Firefox */
+    elem.mozRequestFullScreen();
+  } else if (elem.webkitRequestFullscreen) {
+    /* Chrome, Safari & Opera */
+    elem.webkitRequestFullscreen();
+  } else if (elem.msRequestFullscreen) {
+    /* IE/Edge */
+    elem.msRequestFullscreen();
+  }
+}
+
+onKeyStroke("ArrowLeft", (e) => {
+  e.preventDefault();
+  scrollEntity(true);
+});
+
+onKeyStroke("ArrowRight", (e) => {
+  e.preventDefault();
+  scrollEntity();
+});
+
 let file = createResource({
   url: "drive.api.permissions.get_entity_with_permissions",
   params: { entity_name: props.entityName },
@@ -120,7 +148,15 @@ let file = createResource({
     }
   },
   onError(error) {
-    console.log(error);
+    if (error && error.exc_type === "PermissionError") {
+      store.commit("setError", {
+        iconName: "alert-triangle",
+        iconClass: "fill-amber-500 stroke-white",
+        primaryMessage: "Forbidden",
+        secondaryMessage: "Insufficient permissions for this resource",
+      });
+    }
+    router.replace({ name: "Error" });
   },
 });
 
@@ -137,3 +173,20 @@ onBeforeUnmount(() => {
   store.commit("setEntityInfo", []);
 });
 </script>
+
+<style scoped>
+.center-transform {
+  transform: translate(-50%, -50%);
+}
+
+#renderContainer::backdrop {
+  background-color: rgb(0, 0, 0);
+  min-width: 100vw;
+  min-height: 100vh;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+}
+</style>

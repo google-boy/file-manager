@@ -12,6 +12,8 @@
 <script>
 import TextEditor from "@/components/DocEditor/TextEditor.vue";
 import { fromUint8Array, toUint8Array } from "js-base64";
+import { toast } from "../utils/toasts";
+import { formatSize, formatDate } from "@/utils/format";
 
 export default {
   components: {
@@ -70,6 +72,11 @@ export default {
         comments: this.comments,
         file_size: fromUint8Array(this.content).length,
       });
+      toast({
+        title: "Document saved",
+        position: "bottom-right",
+        timeout: 2,
+      });
     });
     //this.$store.commit("setShowInfo", true);
     this.$resources.getDocument
@@ -82,6 +89,8 @@ export default {
         this.isWriteable =
           this.$resources.getDocument.data.owner === this.userId ||
           !!this.$resources.getDocument.data.write;
+        this.$store.commit("setHasWriteAccess", this.isWriteable);
+        this.$store.commit("setEntityInfo", [this.$resources.getDocument.data]);
       })
       .then(() => {
         this.content = toUint8Array(this.$resources.getDocument.data.content);
@@ -115,14 +124,14 @@ export default {
   beforeUnmount() {
     /* this.$store.commit("setShowInfo", false); */
     clearInterval(this.timer);
-    this.$resources.updateDocument.submit({
+    /* this.$resources.updateDocument.submit({
       entity_name: this.entityName,
       doc_name: this.document,
       title: this.titleVal,
       content: fromUint8Array(this.content),
       comments: this.comments,
       file_size: fromUint8Array(this.content).length,
-    });
+    }); */
   },
   resources: {
     updateDocumentTitle() {
@@ -132,9 +141,6 @@ export default {
         params: {
           entity_name: this.entityName,
           title: this.titleVal,
-        },
-        onError(data) {
-          console.log(data);
         },
         auto: false,
       };
@@ -152,13 +158,27 @@ export default {
     getDocument() {
       return {
         url: "drive.api.permissions.get_entity_with_permissions",
+        method: "GET",
         params: {
           entity_name: this.entityName,
         },
+        onSuccess(data) {
+          data.size_in_bytes = data.file_size;
+          data.file_size = formatSize(data.file_size);
+          data.modified = formatDate(data.modified);
+          data.creation = formatDate(data.creation);
+          data.owner = data.owner === this.userId.value ? "Me" : data.owner;
+        },
         onError(error) {
-          console.log(error);
-          if (error?.messages.some((x) => x.startsWith("PermissionError")))
-            window.location.href = "/";
+          if (error && error.exc_type === "PermissionError") {
+            this.$store.commit("setError", {
+              iconName: "alert-triangle",
+              iconClass: "fill-amber-500 stroke-white",
+              primaryMessage: "Forbidden",
+              secondaryMessage: "Insufficient permissions for this resource",
+            });
+          }
+          this.$router.replace({ name: "Error" });
         },
         auto: false,
       };

@@ -60,7 +60,7 @@
     <GeneralDialog
       v-model="showRemoveDialog"
       :entities="selectedEntities"
-      :for="'unshare'"
+      :for="this.shareView === 'with' ? 'unshare' : 'remove'"
       @success="
         () => {
           fetchUpdate();
@@ -546,6 +546,11 @@ export default {
         {
           label: "Size",
           field: "file_size",
+          sortable: true,
+        },
+        {
+          label: "Type",
+          field: "mime_type",
           sortable: true,
         },
       ].filter((item) => item.sortable);
