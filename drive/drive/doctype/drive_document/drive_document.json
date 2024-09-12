@@ -7,7 +7,15 @@
   "doctype": "DocType",
   "editable_grid": 1,
   "engine": "InnoDB",
-  "field_order": ["title", "content"],
+  "field_order": [
+    "title",
+    "content",
+    "settings",
+    "comments",
+    "raw_content",
+    "mentions",
+    "version"
+  ],
   "fields": [
     {
       "fieldname": "title",
@@ -21,16 +29,47 @@
       "fieldname": "content",
       "fieldtype": "Long Text",
       "label": "Content"
+    },
+    {
+      "default": "{\n   \"docWidth\": false,\n   \"docSize\": true,\n   \"docFont\": \"font-fd-sans\",\n   \"docHeader\": false\n}",
+      "fieldname": "settings",
+      "fieldtype": "JSON",
+      "label": "Settings"
+    },
+    {
+      "fieldname": "comments",
+      "fieldtype": "JSON",
+      "label": "Comments"
+    },
+    {
+      "fieldname": "raw_content",
+      "fieldtype": "Long Text",
+      "label": "Raw Content"
+    },
+    {
+      "fieldname": "mentions",
+      "fieldtype": "JSON",
+      "label": "Mentions"
+    },
+    {
+      "fieldname": "version",
+      "fieldtype": "Int",
+      "label": "Version"
     }
   ],
   "links": [],
-  "modified": "2023-08-23 17:36:52.650920",
+  "modified": "2024-09-03 16:08:28.021205",
   "modified_by": "Administrator",
   "module": "Drive",
   "name": "Drive Document",
   "naming_rule": "Random",
   "owner": "Administrator",
   "permissions": [
+    {
+      "read": 1,
+      "role": "Guest",
+      "write": 1
+    },
     {
       "create": 1,
       "delete": 1,

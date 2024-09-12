@@ -1,21 +1,24 @@
 <template>
   <div
-    class="h-full w-full overflow-hidden flex flex-col items-center justify-start">
+    class="h-full w-full overflow-hidden flex flex-col items-center justify-start"
+  >
     <div
-      :draggable="false"
       id="renderContainer"
-      class="flex items-center justify-center h-full w-full min-h-[85vh] max-h-[85vh] mt-3">
+      :draggable="false"
+      class="flex items-center justify-center h-full w-full min-h-[85vh] max-h-[85vh] mt-3"
+    >
       <FileRender v-if="file.data" :preview-entity="file.data" />
     </div>
     <div
-      v-show="filteredEntities.length > 1"
-      class="absolute bottom-[-1%] left-[50%] center-transform flex items-center justify-center p-1 gap-1 h-10 rounded-lg shadow-xl bg-white">
+      class="hidden sm:flex absolute bottom-[-1%] left-[50%] center-transform items-center justify-center p-1 gap-1 h-10 rounded-lg shadow-xl bg-white"
+    >
       <Button
         :disabled="!prevEntity?.name"
         :variant="'ghost'"
         icon="arrow-left"
-        @click="scrollEntity(true)"></Button>
-      <Button @click="enterFullScreen" :variant="'ghost'">
+        @click="scrollEntity(true)"
+      ></Button>
+      <Button :variant="'ghost'" @click="enterFullScreen">
         <Scan class="w-4" />
       </Button>
       <!--  <Button :variant="'ghost'">
@@ -25,127 +28,156 @@
         :disabled="!nextEntity?.name"
         :variant="'ghost'"
         icon="arrow-right"
-        @click="scrollEntity()"></Button>
+        @click="scrollEntity()"
+      ></Button>
     </div>
+    <ShareDialog
+      v-if="showShareDialog"
+      v-model="showShareDialog"
+      :entity-name="props.entityName"
+    />
   </div>
 </template>
 
 <script setup>
-import { useStore } from "vuex";
-import { ref, computed, onMounted, defineProps, onBeforeUnmount } from "vue";
-import { Button } from "frappe-ui";
-import FileRender from "@/components/FileRender.vue";
-import { createResource } from "frappe-ui";
-import { formatSize, formatDate } from "@/utils/format";
-import { useRouter } from "vue-router";
-import { Scan, FileSignature } from "lucide-vue-next";
-import { onKeyStroke } from "@vueuse/core";
+import { useStore } from "vuex"
+import {
+  ref,
+  computed,
+  onMounted,
+  defineProps,
+  onBeforeUnmount,
+  inject,
+} from "vue"
+import { Button } from "frappe-ui"
+import FileRender from "@/components/FileRender.vue"
+import { createResource } from "frappe-ui"
+import { formatSize, formatDate } from "@/utils/format"
+import { useRouter } from "vue-router"
+import { Scan } from "lucide-vue-next"
+import { onKeyStroke } from "@vueuse/core"
+import ShareDialog from "@/components/ShareDialog/ShareDialog.vue"
 
-const router = useRouter();
-const store = useStore();
+const router = useRouter()
+const store = useStore()
+const emitter = inject("emitter")
+const realtime = inject("realtime")
 const props = defineProps({
   entityName: {
     type: String,
     default: null,
   },
-});
+})
 
-const entity = ref(null);
-const currentEntity = ref(props.entityName);
+const entity = ref(null)
+const showShareDialog = ref(false)
+const currentEntity = ref(props.entityName)
 const userId = computed(() => {
-  return store.state.auth.user_id;
-});
+  return store.state.auth.user_id
+})
 
 const filteredEntities = computed(() => {
-  return store.state.currentViewEntites.filter(
-    (item) => item.is_group === 0 && item.mime_type !== "frappe_doc"
-  );
-});
+  if (store.state.currentViewEntites.length) {
+    return store.state.currentViewEntites.filter(
+      (item) => item.is_group === 0 && item.mime_type !== "frappe_doc"
+    )
+  } else {
+    return []
+  }
+})
 
 const currentEntityIndex = computed(() => {
   return filteredEntities.value.findIndex(
     (item) => item.name === props.entityName
-  );
-});
+  )
+})
 
 const prevEntity = computed(() => {
-  return filteredEntities.value[currentEntityIndex.value - 1];
-});
+  return filteredEntities.value[currentEntityIndex.value - 1]
+})
 
 const nextEntity = computed(() => {
-  return filteredEntities.value[currentEntityIndex.value + 1];
-});
+  return filteredEntities.value[currentEntityIndex.value + 1]
+})
 
 function fetchFile(currentEntity) {
   file.fetch({ entity_name: currentEntity }).then(() => {
     router.replace({
       name: "File",
       params: { entityName: currentEntity },
-    });
-  });
+    })
+  })
 }
 
-function enterFullScreen(id) {
-  let elem = document.getElementById("renderContainer");
+function enterFullScreen() {
+  let elem = document.getElementById("renderContainer")
   if (elem.requestFullscreen) {
-    elem.requestFullscreen();
+    elem.requestFullscreen()
   } else if (elem.mozRequestFullScreen) {
     /* Firefox */
-    elem.mozRequestFullScreen();
+    elem.mozRequestFullScreen()
   } else if (elem.webkitRequestFullscreen) {
     /* Chrome, Safari & Opera */
-    elem.webkitRequestFullscreen();
+    elem.webkitRequestFullscreen()
   } else if (elem.msRequestFullscreen) {
     /* IE/Edge */
-    elem.msRequestFullscreen();
+    elem.msRequestFullscreen()
   }
 }
 
 onKeyStroke("ArrowLeft", (e) => {
-  e.preventDefault();
-  scrollEntity(true);
-});
+  e.preventDefault()
+  scrollEntity(true)
+})
 
 onKeyStroke("ArrowRight", (e) => {
-  e.preventDefault();
-  scrollEntity();
-});
+  e.preventDefault()
+  scrollEntity()
+})
 
 let file = createResource({
   url: "drive.api.permissions.get_entity_with_permissions",
   params: { entity_name: props.entityName },
   transform(data) {
-    entity.value = data;
-    data.size_in_bytes = data.file_size;
-    data.file_size = formatSize(data.file_size);
-    data.modified = formatDate(data.modified);
-    data.creation = formatDate(data.creation);
-    data.owner = data.owner === userId.value ? "Me" : data.owner;
-    store.commit("setEntityInfo", [data]);
+    entity.value = data
+    data.size_in_bytes = data.file_size
+    data.file_size = formatSize(data.file_size)
+    data.modified = formatDate(data.modified)
+    data.creation = formatDate(data.creation)
+    data.owner = data.owner === userId.value ? "You" : data.owner
+    store.commit("setEntityInfo", [data])
   },
   onSuccess(data) {
-    let currentBreadcrumbs = [];
-    currentBreadcrumbs = store.state.currentBreadcrumbs;
-    if (
-      !currentBreadcrumbs[currentBreadcrumbs.length - 1].route.includes("/file")
-    ) {
-      currentBreadcrumbs.push({
-        label: data.title,
-        route: `/file/${props.entityName}`,
-      });
-      store.breadcrumbs = currentBreadcrumbs;
-      store.commit("setCurrentBreadcrumbs", currentBreadcrumbs);
-    } else {
-      let scrolledFileBreadcrumb = {
-        label: data.title,
-        route: `/file/${data.name}`,
-      };
-      currentBreadcrumbs.splice(
-        currentBreadcrumbs.length - 1,
-        1,
-        scrolledFileBreadcrumb
-      );
+    let currentBreadcrumbs = [
+      {
+        label: "Shared",
+        route: "/shared",
+      },
+    ]
+    const root_item = data.breadcrumbs[0]
+    if (root_item.name === store.state.homeFolderID) {
+      currentBreadcrumbs = [
+        {
+          label: "Home",
+          route: "/home",
+        },
+      ]
+      data.breadcrumbs.shift()
     }
+    data.breadcrumbs.forEach((item, idx) => {
+      if (idx === data.breadcrumbs.length - 1) {
+        currentBreadcrumbs.push({
+          label: item.title,
+          route: "/file/" + item.name,
+        })
+      } else {
+        currentBreadcrumbs.push({
+          label: item.title,
+          route: "/folder/" + item.name,
+        })
+      }
+    })
+    store.commit("setCurrentBreadcrumbs", currentBreadcrumbs)
   },
   onError(error) {
     if (error && error.exc_type === "PermissionError") {
@@ -154,24 +186,58 @@ let file = createResource({
         iconClass: "fill-amber-500 stroke-white",
         primaryMessage: "Forbidden",
         secondaryMessage: "Insufficient permissions for this resource",
-      });
+      })
     }
-    router.replace({ name: "Error" });
+    router.replace({ name: "Error" })
   },
-});
+})
 
 function scrollEntity(negative = false) {
-  currentEntity.value = negative ? prevEntity.value : nextEntity.value;
-  fetchFile(currentEntity.value.name);
+  currentEntity.value = negative ? prevEntity.value : nextEntity.value
+  fetchFile(currentEntity.value.name)
 }
 
 onMounted(() => {
-  fetchFile(props.entityName);
-});
+  fetchFile(props.entityName)
+  realtime.doc_subscribe("Drive Entity", props.entityName)
+  realtime.doc_open("Drive Entity", props.entityName)
+  realtime.on("doc_viewers", (data) => {
+    store.state.connectedUsers = data.users
+    userInfo.submit({ users: JSON.stringify(data.users) })
+  })
+  if (window.matchMedia("(max-width: 1500px)").matches) {
+    store.commit("setIsSidebarExpanded", false)
+  }
+  emitter.on("showShareDialog", () => {
+    showShareDialog.value = true
+  })
+})
 
 onBeforeUnmount(() => {
-  store.commit("setEntityInfo", []);
-});
+  realtime.off("doc_viewers")
+  store.state.connectedUsers = []
+  realtime.doc_close("Drive Entity", file.data.name)
+  realtime.doc_unsubscribe("Drive Entity", file.data.name)
+  store.commit("setEntityInfo", [])
+})
+
+let userInfo = createResource({
+  url: "frappe.desk.form.load.get_user_info_for_viewers",
+  // compatibility with document awareness
+  onSuccess(data) {
+    data = Object.values(data)
+    data.forEach((item) => {
+      if (item.fullname) {
+        item.avatar = item.image
+        item.name = item.fullname
+        delete item.image
+        delete item.fullname
+      }
+    })
+    store.state.connectedUsers = data
+  },
+  auto: false,
+})
 </script>
 
 <style scoped>

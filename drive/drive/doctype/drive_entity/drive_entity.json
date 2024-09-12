@@ -2,7 +2,7 @@
   "actions": [],
   "autoname": "Prompt",
   "creation": "2021-12-30 11:21:16.076483",
-  "default_view": "Tree",
+  "default_view": "List",
   "doctype": "DocType",
   "editable_grid": 1,
   "engine": "InnoDB",
@@ -75,7 +75,7 @@
     },
     {
       "fieldname": "file_size",
-      "fieldtype": "Int",
+      "fieldtype": "Long Int",
       "label": "File Size",
       "read_only": 1
     },
@@ -100,6 +100,12 @@
       "read_only": 1
     },
     {
+      "fieldname": "file_kind",
+      "fieldtype": "Data",
+      "label": "File Kind",
+      "read_only": 0
+    },
+    {
       "default": "0",
       "fieldname": "version",
       "fieldtype": "Int",
@@ -114,22 +120,22 @@
     {
       "default": "1",
       "fieldname": "is_active",
-      "fieldtype": "Check",
+      "fieldtype": "Int",
       "label": "Is Active"
     },
     {
       "fieldname": "parent_before_trash",
-      "fieldtype": "Data",
+      "fieldtype": "Text",
       "label": "Parent Before Trash"
     },
     {
-      "default": "0",
+      "default": "1",
       "fieldname": "allow_comments",
       "fieldtype": "Check",
       "label": "Allow Comments"
     },
     {
-      "default": "0",
+      "default": "1",
       "fieldname": "allow_download",
       "fieldtype": "Check",
       "label": "Allow Download"
@@ -157,6 +163,15 @@
   "nsm_parent_field": "parent_drive_entity",
   "owner": "Administrator",
   "permissions": [
+    {
+      "create": 0,
+      "delete": 0,
+      "export": 0,
+      "read": 1,
+      "role": "Guest",
+      "share": 0,
+      "write": 1
+    },
     {
       "create": 1,
       "delete": 1,

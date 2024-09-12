@@ -15,7 +15,8 @@ def get_users_with_drive_user_role_and_groups(txt=""):
             doctype="User",
             filters=[
                 ["Has Role", "role", "=", "Drive User"],
-                ["full_name", "like", f"%{txt}%"],
+                ["full_name", "not like", "Administrator"],
+                ["full_name", "not like", "Guest"],
             ],
             fields=[
                 "email",
@@ -34,12 +35,15 @@ def get_users_with_drive_user_role_and_groups(txt=""):
 
 
 @frappe.whitelist()
-def get_users_with_drive_user_role(txt=""):
+def get_users_with_drive_user_role(txt="", get_roles=False):
     try:
         drive_users = frappe.get_all(
             doctype="User",
+            order_by="full_name",
             filters=[
                 ["Has Role", "role", "=", "Drive User"],
+                ["full_name", "not like", "Administrator"],
+                ["full_name", "not like", "Guest"],
                 ["full_name", "like", f"%{txt}%"],
             ],
             fields=[
@@ -48,6 +52,13 @@ def get_users_with_drive_user_role(txt=""):
                 "user_image",
             ],
         )
+        if get_roles == "true":
+            for user in drive_users:
+                if frappe.db.exists("Has Role", {"parent": user.email, "role": "Drive Admin"}):
+                    user["role"] = "Admin"
+                else:
+                    user["role"] = "User"
+
         return drive_users
 
     except Exception as e:
@@ -68,13 +79,18 @@ def get_all_users_on_site():
                 "message": "You do not have permission to access this resource",
             }
 
-        site_users = frappe.get_all(
+        site_users = frappe.get_list(
             doctype="User",
             fields=[
                 "username",
                 "email",
                 "full_name",
+                "user_image",
             ],
+            filters={
+                "username": ["not like", "%administrator%"],
+                "username": ["not like", "%guest%"],
+            },
         )
 
         return site_users
@@ -171,7 +187,12 @@ def has_read_write_access_to_doctype(user_id, doctype_name):
     return False
 
 
-def mark_as_viewed(entity_name):
+def mark_as_viewed(entity):
+    if frappe.session.user == "Guest":
+        return
+    if entity.is_group:
+        return
+    entity_name = entity.name
     entity_log = frappe.db.get_value(
         "Drive Entity Log", {"entity_name": entity_name, "user": frappe.session.user}
     )

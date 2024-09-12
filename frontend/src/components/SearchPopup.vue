@@ -1,155 +1,265 @@
 <template>
-  <div v-on-outside-click="closePopup" :class="divClass">
-    <Input
-      v-model="search"
-      icon-left="search"
-      type="text"
-      :class="{ 'bg-white focus:bg-white': isOpen }"
-      placeholder="Search"
-      @focus="openPopup"
-      @input="($event) => (search = $event)" />
-    <div v-if="isOpen" class="mt-3">
-      <div v-if="showEntities">
+  <Dialog v-model:open="open" :options="{ size: '2xl', position: 'top' }">
+    <template #body>
+      <div class="flex px-4 py-3 gap-1 items-center border-b">
+        <Search class="w-4 mr-1 h-auto" name="search" />
+        <input
+          v-model="search"
+          icon-left="search"
+          type="text"
+          class="appearance-none forced-colors:hidden w-full border-none bg-transparent py-3 pl-11.5 pr-4.5 text-base text-gray-800 placeholder-gray-500 focus:ring-0"
+          placeholder="Search"
+        />
+      </div>
+      <div
+        v-if="$resources.entities.data?.length"
+        class="flex flex-col py-4 px-2.5 overflow-y-auto overflow-x-auto max-h-[50vh]"
+      >
+        <span class="mb-1 pl-2 text-base text-gray-600"
+          >Search results for <strong>"{{ search }}"</strong></span
+        >
         <div
-          v-for="entity in filteredEntities"
-          :key="entity"
-          class="flex items-center cursor-pointer hover:bg-gray-100 rounded-xl py-2 px-3 mb-2"
-          @click="openEntity(entity)">
-          <img
-            :src="
-              getIconUrl(
-                entity.is_group ? 'folder' : formatMimeType(entity.mime_type)
-              )
-            "
-            class="w-6 h-6 mr-3" />
-          <div class="flex flex-col">
-            <div class="text-base text-gray-900 font-medium truncate mb-1">
-              {{ entity.title }}
-            </div>
-            <div class="text-sm text-gray-600 mb-1">{{ entity.owner }}</div>
-            <div class="text-xs text-gray-600">{{ entity.modified }}</div>
+          v-for="entity in $resources.entities.data"
+          :key="entity.name"
+          class="grid grid-flow-col grid-cols-8 gap-2 w-full items-center rounded px-2 py-2 text-base cursor-pointer hover:bg-gray-100"
+          @click="openEntity(entity)"
+        >
+          <div class="flex items-center gap-2 w-full col-span-6">
+            <svg
+              v-if="entity.is_group"
+              class="h-4 w-4"
+              :draggable="false"
+              :style="{ fill: entity.color }"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <g clip-path="url(#clip0_1942_59507)">
+                <path
+                  d="M7.83412 2.88462H1.5C1.22386 2.88462 1 3.10847 1 3.38462V12.5C1 13.6046 1.89543 14.5 3 14.5H13C14.1046 14.5 15 13.6046 15 12.5V2C15 1.72386 14.7761 1.5 14.5 1.5H9.94008C9.88623 1.5 9.83382 1.51739 9.79065 1.54957L8.13298 2.78547C8.04664 2.84984 7.94182 2.88462 7.83412 2.88462Z"
+                />
+              </g>
+              <defs>
+                <clipPath id="clip0_1942_59507">
+                  <rect width="16" height="16" fill="white" />
+                </clipPath>
+              </defs>
+            </svg>
+            <img
+              v-else
+              class="w-4 h-4"
+              :src="getIconUrl(formatMimeType(entity.mime_type))"
+            />
+            <span class="truncate">{{ entity.title }}</span>
           </div>
-        </div>
-      </div>
-      <div v-else class="mx-2.5 mt-6">
-        <div class="flex flex-wrap">
           <div
-            v-for="item in filterItems"
-            :key="item"
-            class="w-1/2 sm:w-1/3 md:w-1/4 lg:w-1/5 xl:w-1/6 2xl:w-1/8 border rounded-lg flex flex-col items-center justify-center cursor-pointer mb-2.5 mr-2.5"
-            :class="{ 'bg-gray-200': selectedFilterItems[item.imgSrc] }"
-            @click="
-              selectedFilterItems[item.imgSrc] =
-                !selectedFilterItems[item.imgSrc]
-            ">
-            <img :src="getIconUrl(item.imgSrc)" class="w-10 h-10 my-3" />
-            <div class="text-sm text-gray-700 text-center">
-              {{ item.title }}
-            </div>
+            class="col-span-2 grid grid-flow-col justify-start items-center truncate"
+          >
+            <Avatar
+              :image="entity.user_image"
+              :label="entity.full_name"
+              class="relative mr-2"
+              size="xs"
+            />
+            <span class="text-base text-gray-800">{{ entity.full_name }}</span>
           </div>
         </div>
       </div>
-    </div>
-  </div>
+      <div
+        v-if="search.length > 3 && !$resources.entities.data?.length"
+        class="flex flex-col py-4 px-2.5"
+      >
+        <span class="mb-1 pl-2 text-base text-gray-600"
+          >No results for <strong>"{{ search }}"</strong></span
+        >
+      </div>
+      <div
+        v-if="!$resources.entities.data?.length && !search.length"
+        class="flex flex-col mb-2 mt-4 first:mt-3"
+      >
+        <span class="mb-1 px-4.5 text-base text-gray-600">Jump to</span>
+        <div class="px-2.5">
+          <div
+            class="flex w-full min-w-0 items-center rounded px-2 py-2 text-base font-medium text-gray-700 hover:bg-gray-100"
+            @click="
+              $router.push({ name: 'Home' }),
+                emitter.emit('showSearchPopup', false)
+            "
+          >
+            <Home class="mr-2 h-4 w-4 text-gray-700" />
+            Home
+          </div>
+          <div
+            class="flex w-full min-w-0 items-center rounded px-2 py-2 text-base font-medium text-gray-700 hover:bg-gray-100"
+            @click="
+              $router.push({ name: 'Recents' }),
+                emitter.emit('showSearchPopup', false)
+            "
+          >
+            <Recent class="mr-2 h-4 w-4 text-gray-700" />
+            Recents
+          </div>
+          <div
+            class="flex w-full min-w-0 items-center rounded px-2 py-2 text-base font-medium text-gray-700 hover:bg-gray-100"
+            @click="
+              $router.push({ name: 'Favourites' }),
+                emitter.emit('showSearchPopup', false)
+            "
+          >
+            <Star class="mr-2 h-4 w-4 text-gray-700" />
+            Favourites
+          </div>
+        </div>
+        <span class="mt-3 mb-1 px-4.5 text-base text-gray-600">Actions</span>
+        <div class="px-2.5">
+          <div
+            class="flex w-full min-w-0 items-center rounded px-2 py-2 text-base font-medium text-gray-700 hover:bg-gray-100"
+            @click="
+              emitter.emit('uploadFile'), emitter.emit('showSearchPopup', false)
+            "
+          >
+            <FileUpload class="stroke-[1.35] mr-2 h-4 w-4 text-gray-700" />
+            Upload File
+          </div>
+          <div
+            class="flex w-full min-w-0 items-center rounded px-2 py-2 text-base font-medium text-gray-700 hover:bg-gray-100"
+            @click="
+              emitter.emit('uploadFolder'),
+                emitter.emit('showSearchPopup', false)
+            "
+          >
+            <FolderUpload class="stroke-[1.35] mr-2 h-4 w-4 text-gray-700" />
+            Upload Folder
+          </div>
+          <!--       <div class="flex w-full min-w-0 items-center rounded px-2 py-2 text-base font-medium text-gray-700 hover:bg-gray-100">
+        <FeatherIcon name="folder-plus" class="mr-2 h-4 w-4 text-gray-700"/>
+        New Folder
+      </div>
+      <div class="flex w-full min-w-0 items-center rounded px-2 py-2 text-base font-medium text-gray-700 hover:bg-gray-100">
+        <FeatherIcon name="file-text" class="mr-2 h-4 w-4 text-gray-700"/>
+        New Document
+      </div> -->
+        </div>
+      </div>
+    </template>
+  </Dialog>
 </template>
 <script>
-import { Input } from "frappe-ui";
-import { formatSize, formatDate } from "@/utils/format";
-import getFilteredEntities from "../utils/fuzzySearcher";
-import { formatMimeType } from "@/utils/format";
-import { getIconUrl } from "@/utils/getIconUrl";
+import Home from "./EspressoIcons/Home.vue"
+import Recent from "./EspressoIcons/Recent.vue"
+import Search from "./EspressoIcons/Search.vue"
+import FileUpload from "./EspressoIcons/File-upload.vue"
+import FolderUpload from "./EspressoIcons/Folder-upload.vue"
+import { Dialog, Avatar } from "frappe-ui"
+import { formatMimeType } from "@/utils/format"
+import { getIconUrl } from "@/utils/getIconUrl"
+import Star from "./EspressoIcons/Star.vue"
 
 export default {
   name: "SearchPopup",
   components: {
-    Input,
+    Dialog,
+    Avatar,
+    Home,
+    Recent,
+    Search,
+    Star,
+    FileUpload,
+    FolderUpload,
   },
-  emits: ["openEntity"],
+  emits: ["openEntity", "update:open"],
   setup() {
-    return { formatMimeType, getIconUrl };
+    return { formatMimeType, getIconUrl }
   },
   data() {
     return {
-      search: "",
       isOpen: false,
-      filterItems: [
-        {
-          title: "Documents",
-          imgSrc: "doc",
-        },
-        {
-          title: "Spreadsheets",
-          imgSrc: "spreadsheet",
-        },
-        {
-          title: "PDFs",
-          imgSrc: "pdf",
-        },
-        {
-          title: "Video",
-          imgSrc: "video",
-        },
-        {
-          title: "Folder",
-          imgSrc: "folder",
-        },
-      ],
-      selectedFilterItems: {
-        doc: false,
-        spreadsheet: false,
-        pdf: false,
-        video: false,
-        folder: false,
-      },
-    };
+      search: "",
+      selectedEntity: "",
+    }
   },
   computed: {
-    divClass() {
-      if (!this.isOpen)
-        return "w-[200px] rounded-lg bg-white transition-all duration-[600ms]";
-      return "w-[620px] border shadow-md p-2 rounded-2xl bg-white transition-all duration-[600ms]";
+    fullName() {
+      return this.$store.state.user.fullName
     },
-    userId() {
-      return this.$store.state.auth.user_id;
+    open: {
+      get() {
+        return this.open
+      },
+      set(value) {
+        this.$emit("update:open", value)
+      },
     },
-    filteredEntities() {
-      return getFilteredEntities(this.search, this.$resources.entities.data);
-    },
-    showEntities() {
-      return this.search.length > 0;
+  },
+  watch: {
+    search: {
+      handler(value) {
+        if (value.length >= 3) {
+          this.search = value
+          this.$resources.entities.submit({
+            query: value,
+            home_dir: this.$store.state.homeFolderID,
+          })
+        } else {
+          this.$resources.entities.reset()
+        }
+      },
     },
   },
   methods: {
     openEntity(entity) {
-      this.isOpen = false;
-      this.$emit("openEntity", entity);
-    },
-    openPopup() {
-      this.$resources.entities.fetch();
-      this.isOpen = true;
-    },
-    closePopup() {
-      this.isOpen = false;
+      this.$resources.upwardPath
+        .fetch({ entity_name: entity.name })
+        .then(() => {
+          if (entity.is_group) {
+            this.selectedEntities = []
+            this.$router.push({
+              name: "Folder",
+              params: { entityName: entity.name },
+            })
+          } else if (entity.document) {
+            this.$router.push({
+              name: "Document",
+              params: { entityName: entity.name },
+            })
+          } else {
+            this.$router.push({
+              name: "File",
+              params: { entityName: entity.name },
+            })
+          }
+        })
+      this.emitter.emit("showSearchPopup", false)
     },
   },
   resources: {
     entities() {
       return {
-        url: "drive.api.permissions.get_all_my_entities",
-        onSuccess(data) {
-          this.$resources.entities.error = null;
-          data.forEach((entity) => {
-            entity.size_in_bytes = entity.file_size;
-            entity.file_size = entity.is_group
-              ? "-"
-              : formatSize(entity.file_size);
-            entity.modified = formatDate(entity.modified);
-            entity.creation = formatDate(entity.creation);
-            entity.owner = entity.owner === this.userId ? "Me" : entity.owner;
-          });
-        },
-      };
+        auto: false,
+        method: "POST",
+        url: "drive.api.files.search",
+      }
+    },
+    upwardPath() {
+      return {
+        auto: false,
+        method: "POST",
+        url: "drive.api.files.generate_upward_path",
+      }
     },
   },
-};
+}
 </script>
+
+<style scoped>
+input {
+  all: unset;
+}
+input:focus {
+  all: unset;
+  outline: none;
+  border: none;
+}
+</style>

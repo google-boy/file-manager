@@ -1,103 +1,120 @@
 <template>
-  <div class="flex-col w-full overflow-y-scroll" v-if="editor">
-    <div class="flex w-full items-start justify-start lg:justify-center">
+  <div v-if="editor && initComplete" class="flex-col w-full overflow-y-auto">
+    <div
+      :class="[
+        settings.docFont,
+        settings.docSize ? 'text-[15px]' : 'text-[17px]',
+        settings.docWidth
+          ? 'sm:min-w-[75vw] sm:max-w-[75vw]'
+          : 'sm:min-w-[21cm] sm:max-w-[21cm]',
+      ]"
+      class="flex sm:w-full items-start justify-start lg:justify-center mx-auto"
+    >
       <editor-content
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-        spellcheck="true"
         id="editor-capture"
-        :editor="editor" />
+        class="min-w-full"
+        autocomplete="true"
+        autocorrect="true"
+        autocapitalize="true"
+        :spellcheck="settings.docSpellcheck ? true : false"
+        :editor="editor"
+        @keydown.enter.passive="handleEnterKey"
+      />
     </div>
+    <TableBubbleMenu v-if="isWritable" :editor="editor" />
     <BubbleMenu
+      v-if="editor"
       v-show="!forceHideBubbleMenu"
-      v-on-outside-click="toggleCommentMenu"
-      :updateDelay="250"
-      :tippy-options="{ animation: 'shift-away' }"
+      plugin-key="main"
       :should-show="shouldShow"
-      :editor="editor">
-      <Menu
-        class="rounded-md border border-gray-100 shadow-lg"
-        :buttons="bubbleMenuButtons" />
+      :editor="editor"
+    >
+      <Menu :buttons="bubbleMenuButtons" />
     </BubbleMenu>
   </div>
-  <DocMenuAndInfoBar v-if="isWritable" :editor="editor" ref="MenuBar" />
-  <InfoSidebar v-else />
+  <DocMenuAndInfoBar
+    v-if="editor && initComplete"
+    ref="MenuBar"
+    v-model:allAnnotations="allAnnotations"
+    v-model:activeAnnotation="activeAnnotation"
+    :editor="editor"
+    :versions="versions"
+    :settings="settings"
+  />
   <FilePicker
     v-if="showFilePicker"
     v-model="showFilePicker"
-    :suggestedTabIndex="1"
+    :suggested-tab-index="0"
     @success="
       (val) => {
-        pickedFile = val;
-        showFilePicker = false;
+        pickedFile = val
+        showFilePicker = false
         if (editor) {
-          if (this.editable) {
-            wordToHTML();
+          if (editable) {
+            wordToHTML()
           }
         }
       }
-    " />
-  <NewComment
-    v-if="showCommentMenu"
-    :editor="editor"
-    v-model="showCommentMenu"
-    @success="() => (showCommentMenu = false)" />
+    "
+  />
+  <SnapshotPreviewDialog
+    v-if="snapShotDialog"
+    v-model="snapShotDialog"
+    :snapshot-data="selectedSnapshot"
+    @success="
+      () => {
+        selectedSnapshot = null
+      }
+    "
+  />
 </template>
 
 <script>
-import "tippy.js/animations/shift-away.css";
-import { normalizeClass, computed } from "vue";
-import {
-  Editor,
-  EditorContent,
-  BubbleMenu,
-  isTextSelection,
-} from "@tiptap/vue-3";
-import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
-import Placeholder from "@tiptap/extension-placeholder";
-import TextAlign from "@tiptap/extension-text-align";
-import Table from "@tiptap/extension-table";
-import TableCell from "@tiptap/extension-table-cell";
-import TableHeader from "@tiptap/extension-table-header";
-import TableRow from "@tiptap/extension-table-row";
-import CharacterCount from "@tiptap/extension-character-count";
-import Image from "./image-extension";
-import Video from "./video-extension";
-import Link from "@tiptap/extension-link";
-import Typography from "@tiptap/extension-typography";
-/* import TextStyle from "@tiptap/extension-text-style"; */
-/* import Highlight from "@tiptap/extension-highlight";
- */ import FontFamily from "@tiptap/extension-font-family";
-import TaskItem from "@tiptap/extension-task-item";
-import TaskList from "@tiptap/extension-task-list";
-import { FontSize } from "./font-size";
-import { Highlight } from "./backgroundColor";
-import { TextStyle } from "./text-style";
-import { Color } from "@tiptap/extension-color";
-import configureMention from "./mention";
-import { detectMarkdown, markdownToHTML } from "../../utils/markdown";
-import { DOMParser } from "prosemirror-model";
-import { onOutsideClickDirective, Avatar } from "frappe-ui";
-import { v4 as uuidv4 } from "uuid";
-import { Comment } from "./comment";
-import { LineHeight } from "./lineHeight";
-import { Indent } from "./indent";
-import Collaboration from "@tiptap/extension-collaboration";
-import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
-import * as Y from "yjs";
-import { WebrtcProvider } from "y-webrtc";
-import { createEditorButton } from "./utils";
-import DocMenuAndInfoBar from "./DocMenuAndInfoBar.vue";
-import Menu from "./Menu.vue";
-import InfoSidebar from "../InfoSidebar.vue";
-import { toast } from "@/utils/toasts.js";
-import { PageBreak } from "./Pagebreak";
-import { convertToHtml } from "mammoth";
-import FilePicker from "@/components/FilePicker.vue";
-import { ResizableMedia } from "./resizeableMedia";
-import NewComment from "./NewComment.vue";
+import FilePicker from "@/components/FilePicker.vue"
+import { toast } from "@/utils/toasts.js"
+import Link from "@tiptap/extension-link"
+import TaskItem from "@tiptap/extension-task-item"
+import TaskList from "@tiptap/extension-task-list"
+import Typography from "@tiptap/extension-typography"
+import StarterKit from "@tiptap/starter-kit"
+import { BubbleMenu, Editor, EditorContent } from "@tiptap/vue-3"
+import { onOutsideClickDirective } from "frappe-ui"
+import { DOMParser } from "prosemirror-model"
+import { v4 as uuidv4 } from "uuid"
+import { computed, normalizeClass } from "vue"
+import { IndexeddbPersistence } from "y-indexeddb"
+import { WebrtcProvider } from "y-webrtc"
+import * as Y from "yjs"
+import { uploadDriveEntity } from "../../utils/chunkFileUpload"
+import { detectMarkdown, markdownToHTML } from "../../utils/markdown"
+import DocMenuAndInfoBar from "./components/DocMenuAndInfoBar.vue"
+import configureMention from "./extensions/mention/mention"
+import Menu from "./components/Menu.vue"
+import { Table } from "./extensions/table"
+import TableBubbleMenu from "./components/TableBubbleMenu.vue"
+import { Comment } from "./extensions/comment"
+import { PageBreak } from "./extensions/Pagebreak"
+import { Highlight } from "./extensions/backgroundColor"
+import { CharacterCount } from "./extensions/character-count"
+import { Collaboration } from "./extensions/collaboration"
+import { CollaborationCursor } from "./extensions/collaborationCursor"
+import { Color } from "./extensions/color"
+import { FontFamily } from "./extensions/font-family"
+import { FontSize } from "./extensions/font-size"
+import { Indent } from "./extensions/indent"
+import { LineHeight } from "./extensions/lineHeight"
+import { Placeholder } from "./extensions/placeholder"
+import { TextAlign } from "./extensions/text-align"
+import { TextStyle } from "./extensions/text-style"
+import { Underline } from "./extensions/underline"
+import { ResizableMedia } from "./extensions/resizenode"
+import { createEditorButton } from "./utils"
+import { Annotation } from "./extensions/AnnotationExtension/annotation"
+import suggestion from "./extensions/suggestion/suggestion"
+import Commands from "./extensions/suggestion/suggestionExtension"
+import SnapshotPreviewDialog from "./components/SnapshotPreviewDialog.vue"
+import { formatDate } from "../../utils/format"
+import { Paragraph } from "./extensions/paragraph"
 
 export default {
   name: "TextEditor",
@@ -106,12 +123,9 @@ export default {
     BubbleMenu,
     Menu,
     DocMenuAndInfoBar,
-    InfoSidebar,
-    toast,
-    Avatar,
     FilePicker,
-    ResizableMedia,
-    NewComment,
+    TableBubbleMenu,
+    SnapshotPreviewDialog,
   },
   directives: {
     onOutsideClick: onOutsideClickDirective,
@@ -119,14 +133,16 @@ export default {
   provide() {
     return {
       editor: computed(() => this.editor),
-    };
+      document: computed(() => this.document),
+      versions: computed(() => this.versions),
+    }
   },
   inheritAttrs: false,
-  expose: ["editor"],
+  //expose: ["editor", "versions"],
   props: {
-    fixedMenu: {
-      type: [Boolean, Array],
-      default: false,
+    settings: {
+      type: Object,
+      default: null,
     },
     entityName: {
       default: "",
@@ -143,39 +159,52 @@ export default {
       type: String,
       required: false,
     },
-    modelValue: {
+    yjsContent: {
       type: Uint8Array,
       required: true,
       default: null,
     },
-    placeholder: {
+    lastSaved: {
+      type: Number,
+      required: true,
+    },
+    rawContent: {
       type: String,
-      default: "",
+      required: true,
+      default: null,
     },
     isWritable: {
       type: Boolean,
       default: false,
     },
-    bubbleMenu: {
-      type: [Boolean, Array],
-      default: false,
-    },
-    bubbleMenuOptions: {
+    userList: {
       type: Object,
-      default: () => ({}),
-    },
-    mentions: {
-      type: Array,
-      default: () => [],
+      required: true,
+      default: null,
     },
   },
-  emits: ["update:modelValue", "updateTitle", "saveDocument"],
+  emits: [
+    "update:yjsContent",
+    "updateTitle",
+    "saveDocument",
+    "mentionedUsers",
+    "update:rawContent",
+    "update:lastSaved",
+  ],
   data() {
     return {
+      docWidth: this.settings.docWidth,
+      docSize: this.settings.docSize,
+      docFont: this.settings.docFont,
       editor: null,
-      buttons: ["Link", "Separator", "New Comment"],
+      defaultFont: "font-sans",
+      buttons: [],
       forceHideBubbleMenu: false,
+      synced: false,
+      peercount: 0,
+      initComplete: true,
       provider: null,
+      document: null,
       awareness: null,
       connectedUsers: null,
       localStore: null,
@@ -184,7 +213,7 @@ export default {
       currentMode: "",
       showCommentMenu: false,
       commentText: "",
-      isCommentModeOn: false,
+      isCommentModeOn: true,
       isReadOnly: false,
       showFilePicker: false,
       pickedFile: null,
@@ -192,54 +221,101 @@ export default {
         uuid: "",
         comments: [],
       },
+      implicitTitle: "",
+      allAnnotations: [],
       allComments: [],
-      contentStart: "",
-    };
+      activeAnnotation: "",
+      activeAnchorAnnotations: null,
+      isNewDocument: this.entity.title.includes("Untitled Document"),
+      versions: [],
+      selectedSnapshot: null,
+      snapShotDialog: false,
+    }
   },
   computed: {
     editable() {
-      return this.isWritable && this.tempEditable;
+      return this.isWritable && this.tempEditable
     },
     bubbleMenuButtons() {
-      return this.buttons.map(createEditorButton);
+      if (this.entity.owner === "You" || this.entity.write) {
+        let buttons = [
+          "Bold",
+          "Italic",
+          "Underline",
+          "Strikethrough",
+          "Code",
+          "Separator",
+          "Link",
+          "Separator",
+          "NewAnnotation",
+          //"Comment",
+        ]
+        return buttons.map(createEditorButton)
+      } else if (this.entity.allow_comments) {
+        let buttons = ["Comment"]
+        return buttons.map(createEditorButton)
+      }
+      return []
     },
     currentUserName() {
-      return this.$store.state.user.fullName;
+      return this.$store.state.user.fullName
     },
     currentUserImage() {
-      return this.$store.state.user.imageURL;
-    },
-    editorProps() {
-      return {
-        attributes: {
-          class: normalizeClass([
-            "ProseMirror prose prose-sm font-normal prose-h1:font-bold prose-p:my-1 prose-table:table-fixed prose-td:p-2 prose-th:p-2 prose-td:border prose-th:border prose-td:border-gray-300 prose-th:border-gray-300 prose-td:relative prose-th:relative prose-th:bg-gray-100 border-gray-400 placeholder-gray-500 ",
-          ]),
-        },
-        clipboardTextParser: (text, $context) => {
-          if (!detectMarkdown(text)) return;
-          if (
-            !confirm(
-              "Do you want to convert markdown content to HTML before pasting?"
-            )
-          )
-            return;
-
-          let dom = document.createElement("div");
-          dom.innerHTML = markdownToHTML(text);
-          let parser =
-            this.editor.view.someProp("clipboardParser") ||
-            this.editor.view.someProp("domParser") ||
-            DOMParser.fromSchema(this.editor.schema);
-          return parser.parseSlice(dom, {
-            preserveWhitespace: true,
-            context: $context,
-          });
-        },
-      };
+      return this.$store.state.user.imageURL
     },
   },
   watch: {
+    activeAnchorAnnotations: {
+      handler(newVal) {
+        if (newVal) {
+          // unexpected case??
+          let yArray = this.document.getArray("docAnnotations")
+          // Toggle visibility if it's not visible in the document anymore
+          yArray.forEach((item) => {
+            if (newVal.has(item.get("id"))) {
+              item.set("anchor", 1)
+            } else {
+              item.set("anchor", 0)
+            }
+          })
+        }
+      },
+    },
+    isNewDocument: {
+      handler(val) {
+        if (val) {
+          this.$store.state.passiveRename = true
+        } else {
+          this.$store.state.passiveRename = false
+        }
+      },
+      immediate: true,
+    },
+    lastSaved(newVal) {
+      const ymap = this.document.getMap("docinfo")
+      const lastSaved = ymap.get("lastsaved")
+      if (newVal > lastSaved) {
+        ymap.set("lastsaved", newVal)
+      }
+    },
+    settings(newVal) {
+      switch (newVal.toLowerCase()) {
+        case "sans":
+          this.defaultFont = "font-['Nunito']"
+          break
+        case "serif":
+          this.defaultFont = "font-['Lora']"
+          break
+        case "round":
+          this.defaultFont = "font-['Nunito']"
+          break
+        case "mono":
+          this.defaultFont = "font-['Geist-Mono']"
+          break
+        default:
+          this.defaultFont = "font-['InterVar']"
+      }
+    },
     activeCommentsInstance: {
       handler(newVal) {
         if (newVal) {
@@ -247,7 +323,7 @@ export default {
           this.$store.commit(
             "setActiveCommentsInstance",
             JSON.stringify(newVal)
-          );
+          )
         }
       },
       immediate: true,
@@ -255,123 +331,169 @@ export default {
     allComments: {
       handler(newVal) {
         if (newVal) {
-          this.$store.commit("setAllComments", JSON.stringify(newVal));
+          this.$store.commit("setAllComments", JSON.stringify(newVal))
         }
       },
       immediate: true, // make this watch function is called when component created
     },
     editable(value) {
-      this.editor.setEditable(value);
-    },
-    editorProps: {
-      deep: true,
-      attributes: {
-        spellcheck: "false",
-      },
-      handler(value) {
-        if (this.editor) {
-          this.editor.setOptions({
-            editorProps: value,
-          });
-        }
-      },
+      this.editor.setEditable(value)
     },
   },
   mounted() {
     if (window.matchMedia("(max-width: 1500px)").matches) {
-      this.$store.commit("setIsSidebarExpanded", false);
+      this.$store.commit("setIsSidebarExpanded", false)
     }
     this.emitter.on("exportDocToPDF", () => {
       if (this.editor) {
-        this.printEditorContent();
+        this.printEditorContent()
       }
-    });
+    })
     this.emitter.on("forceHideBubbleMenu", (val) => {
       if (this.editor) {
-        this.forceHideBubbleMenu = val;
+        this.forceHideBubbleMenu = val
       }
-    });
+    })
     this.emitter.on("importDocFromWord", () => {
-      this.showFilePicker = true;
-    });
-    const doc = new Y.Doc();
-    Y.applyUpdate(doc, this.modelValue);
-    // Tiny test
-    // https://github.com/yjs/y-webrtc/blob/master/bin/server.js
+      this.showFilePicker = true
+    })
+    const doc = new Y.Doc({ gc: false })
+    const ymap = doc.getMap("docinfo")
+    ymap.set("lastsaved", this.lastSaved)
+    this.document = doc
 
-    /* const indexeddbProvider = new IndexeddbPersistence(
-      // Find a sane time to wipe IDB safely
-      "fdoc" + JSON.stringify(this.entityName),
+    const indexeddbProvider = new IndexeddbPersistence(
+      "fdoc-" + JSON.stringify(this.entityName),
       doc
-    ); */
+    )
+    Y.applyUpdate(doc, this.yjsContent)
     const webrtcProvider = new WebrtcProvider(
-      "fdoc" + JSON.stringify(this.entityName),
+      "fdoc-" + JSON.stringify(this.entityName),
       doc,
       { signaling: ["wss://network.arjunchoudhary.com"] }
-    );
-    this.provider = webrtcProvider;
-    this.awareness = this.provider.awareness.getStates();
-    /* this.localStore = indexeddbProvider; */
-    let componentContext = this;
-    document.addEventListener("keydown", this.saveDoc);
+    )
+    ymap.observe(() => {
+      this.$emit("update:lastSaved", ymap.get("lastsaved"))
+    })
+    this.provider = webrtcProvider
+    this.awareness = this.provider.awareness
+    this.localStore = indexeddbProvider
+    let componentContext = this
+    document.addEventListener("keydown", this.saveDoc)
     this.editor = new Editor({
       editable: this.editable,
-      editorProps: this.editorProps,
-      onCreate() {
-        componentContext.findCommentsAndStoreValues();
-        componentContext.$emit("update:modelValue", Y.encodeStateAsUpdate(doc));
-        componentContext.updateConnectedUsers(componentContext.editor);
+      autofocus: "start",
+      editorProps: {
+        attributes: {
+          class: normalizeClass([
+            `ProseMirror prose prose-sm prose-table:table-fixed prose-td:p-2 prose-th:p-2 prose-td:border prose-th:border prose-td:border-gray-300 prose-th:border-gray-300 prose-td:relative prose-th:relative prose-th:bg-gray-100 rounded-b-lg max-w-[unset] pb-[50vh] md:px-[70px]`,
+          ]),
+        },
+        clipboardTextParser: (text, $context) => {
+          if (!detectMarkdown(text)) return
+          if (
+            !confirm(
+              "Do you want to convert markdown content to HTML before pasting?"
+            )
+          )
+            return
+
+          let dom = document.createElement("div")
+          dom.innerHTML = markdownToHTML(text)
+          let parser =
+            this.editor.view.someProp("clipboardParser") ||
+            this.editor.view.someProp("domParser") ||
+            DOMParser.fromSchema(this.editor.schema)
+          return parser.parseSlice(dom, {
+            preserveWhitespace: true,
+            context: $context,
+          })
+        },
       },
+      onCreate() {
+        //componentContext.findCommentsAndStoreValues()
+        //componentContext.updateConnectedUsers(componentContext.editor)
+      },
+      // evaluate document version
       onUpdate() {
-        componentContext.updateConnectedUsers(componentContext.editor);
-        componentContext.$emit("update:modelValue", Y.encodeStateAsUpdate(doc));
-        componentContext.findCommentsAndStoreValues();
-        componentContext.setCurrentComment();
+        //componentContext.updateConnectedUsers(componentContext.editor)
+        //componentContext.findCommentsAndStoreValues()
+        componentContext.setCurrentComment()
+        componentContext.$emit(
+          "update:rawContent",
+          componentContext.editor.getHTML()
+        )
+        componentContext.$emit(
+          "mentionedUsers",
+          componentContext.parseMentions(componentContext.editor.getJSON())
+        )
+        componentContext.$emit(
+          "update:yjsContent",
+          Y.encodeStateAsUpdate(componentContext.document)
+        )
+        componentContext.updateAnnotationStatus()
       },
       onSelectionUpdate() {
-        componentContext.updateConnectedUsers(componentContext.editor);
-        componentContext.setCurrentComment();
-        componentContext.isTextSelected =
-          !!componentContext.editor.state.selection.content().size;
+        //componentContext.updateConnectedUsers(componentContext.editor)
+        //componentContext.setCurrentComment()
+        //componentContext.isTextSelected =
+        //  !!componentContext.editor.state.selection.content().size
       },
       // eslint-disable-next-line no-sparse-arrays
       extensions: [
         StarterKit.configure({
           history: false,
-          heading: {
-            levels: [1, 2, 3, 4],
+          paragraph: {
             HTMLAttributes: {
-              class: "not-prose",
+              class: this.entity.version > 0 ? "not-prose" : "",
             },
+          },
+          heading: {
+            levels: [1, 2, 3, 4, 5],
           },
           listItem: {
             HTMLAttributes: {
               class: "prose-list-item",
             },
           },
-          /* codeBlock: {
+          codeBlock: {
             HTMLAttributes: {
-              class: "my-5 px-4 py-2 text-sm text-black bg-gray-50 rounded border border-gray-200 leading-5 overflow-x-scroll",
+              spellcheck: false,
+              class:
+                "not-prose my-5 px-4 py-2 text-[0.9em] font-mono text-black bg-gray-50 rounded border border-gray-300 overflow-x-auto",
             },
-          }, */
+          },
+          blockquote: {
+            HTMLAttributes: {
+              class:
+                "prose-quoteless text-black border-l-2 pl-2 border-gray-400 text-[0.9em]",
+            },
+          },
+          code: {
+            HTMLAttributes: {
+              class:
+                "not-prose px-px font-mono bg-gray-50 text-[0.85em] rounded-sm border border-gray-300",
+            },
+          },
           bulletList: {
             keepMarks: true,
             keepAttributes: false,
             HTMLAttributes: {
-              class: "not-prose",
+              class: "",
             },
           },
           orderedList: {
             keepMarks: true,
             keepAttributes: false,
             HTMLAttributes: {
-              class: "not-prose",
+              class: "",
             },
           },
         }),
-        Table.configure({
-          resizable: true,
+        Commands.configure({
+          suggestion,
         }),
+        Table,
         FontFamily.configure({
           types: ["textStyle"],
         }),
@@ -381,6 +503,20 @@ export default {
         }),
         ,
         PageBreak,
+        Annotation.configure({
+          onAnnotationClicked: (ID) => {
+            componentContext.setAndFocusCurrentAnnotation(ID)
+          },
+          onAnnotationActivated: (ID) => {
+            //this.activeAnnotation = ID
+            if (ID) setTimeout(() => componentContext.setCurrentAnnotation(ID))
+          },
+          HTMLAttributes: {
+            //class: 'cursor-pointer annotation  annotation-number'
+            //class: 'cursor-pointer bg-amber-300 bg-opacity-20 border-b-2 border-yellow-300 pb-[1px]'
+            class: "cursor-pointer annotation",
+          },
+        }),
         Collaboration.configure({
           document: doc,
         }),
@@ -389,7 +525,7 @@ export default {
           user: {
             name: this.currentUserName,
             avatar: this.currentUserImage,
-            color: this.getRandomColor(),
+            color: this.RndColor(),
           },
         }),
         LineHeight,
@@ -401,12 +537,12 @@ export default {
           isCommentModeOn: this.isCommentModeOn,
         }),
         Placeholder.configure({
-          placeholder: "Start typing",
+          placeholder: "Press / for commands",
         }),
         Highlight.configure({
           multicolor: true,
         }),
-        configureMention(this.mentions),
+        configureMention(this.userList),
         TaskList.configure({
           HTMLAttributes: {
             class: "not-prose",
@@ -419,9 +555,6 @@ export default {
         }),
         CharacterCount,
         Underline,
-        TableRow,
-        TableHeader,
-        TableCell,
         Typography,
         TextStyle,
         FontSize.configure({
@@ -431,55 +564,113 @@ export default {
           types: ["textStyle"],
         }),
         ResizableMedia.configure({
-          uploadFn: async (file) => {
-            const fd = new FormData();
-            fd.append("file", file);
-            console.log(file);
-            return "https://source.unsplash.com/8xznAGy4HcY/800x400";
-          },
+          uploadFn: (file) => uploadDriveEntity(file, this.entityName),
         }),
       ],
-    });
+    })
     this.emitter.on("emitToggleCommentMenu", () => {
       if (this.editor?.isActive("comment") !== true) {
-        this.showCommentMenu = !this.showCommentMenu;
+        this.showCommentMenu = !this.showCommentMenu
       } else {
-        this.$store.state.showInfo = true;
-        this.$refs.MenuBar.tab = 1;
+        this.$store.state.showInfo = true
+        this.$refs.MenuBar.tab = 5
       }
-    });
-    setTimeout(() => {
-      this.$emit("saveDocument");
-    }, 10000);
+    })
+    window.addEventListener("offline", () => {
+      this.provider.disconnect()
+      this.synced = false
+      this.connected = false
+      this.peercount = 0
+    })
+    window.addEventListener("online", () => {
+      this.provider.connect()
+    })
+    this.localStore.on("synced", () => {
+      this.initComplete = true
+    })
+    this.provider.on("status", (e) => {
+      this.connected = e.connected
+    })
+    this.provider.on("peers", (e) => {
+      this.peercount = e.webrtcPeers.length
+    })
+    this.awareness.on("update", () => {
+      this.$store.commit(
+        "setConnectedUsers",
+        this.editor?.storage.collaborationCursor.users
+      )
+    })
+    this.provider.on("synced", (e) => {
+      this.synced = e.synced
+    })
+    this.$realtime.doc_subscribe("Drive Entity", this.entityName)
+    this.$realtime.doc_open("Drive Entity", this.entityName)
+    this.$realtime.on("document_version_change_recv", (data) => {
+      const { doctype, document, author, author_image, author_id } = data
+      if (author_id === this.$realtime.socket.id) {
+        toast({
+          title: "You changed the document version",
+          position: "bottom-right",
+          timeout: 2,
+        })
+        return
+      }
+      toast({
+        title: `Document version changed`,
+        position: "bottom-right",
+        avatarURL: author_image,
+        avatarLabel: author,
+        timeout: 2,
+      })
+    })
   },
   updated() {
-    let content = this.editor.state.doc.firstChild.textContent.slice(0, 35);
-    if (this.entity.title.includes("Untitled Document")) {
-      this.$store.state.entityInfo[0]["title"] = content;
-    }
-    if (!content.length) {
-      this.$store.state.entityInfo[0]["title"] = this.entity.title;
+    if (this.isNewDocument) {
+      this.evalImplicitTitle()
     }
   },
   beforeUnmount() {
-    //console.log(this.editor.getHTML());
-    this.updateConnectedUsers(this.editor);
-    document.removeEventListener("keydown", this.saveDoc);
-    this.editor.destroy();
-    /* this.localStore.clearData(); */
-    this.provider.destroy();
-    this.provider = null;
-    this.editor = null;
+    this.$realtime.off("document_version_change_recv")
+    this.$realtime.doc_close("Drive Entity", this.entityName)
+    this.$realtime.doc_unsubscribe("Drive Entity", this.entityName)
+    this.updateConnectedUsers(this.editor)
+    this.$store.state.passiveRename = false
+    document.removeEventListener("keydown", this.saveDoc)
+    this.editor.destroy()
+    this.document.destroy()
+    this.provider.disconnect()
+    this.provider.destroy()
+    this.provider = null
+    this.editor = null
   },
   methods: {
+    updateAnnotationStatus() {
+      const temp = new Set()
+      this.editor.state.doc.descendants((node, pos) => {
+        const { marks } = node
+        marks.forEach((mark) => {
+          if (mark.type.name === "annotation") {
+            const annotationMark = mark.attrs.annotationID
+            temp.add(annotationMark)
+          }
+        })
+      })
+      this.activeAnchorAnnotations = temp
+    },
+    handleEnterKey() {
+      if (this.$store.state.passiveRename) {
+        if (!this.implicitTitle.length) return
+        this.isNewDocument = false
+      }
+    },
     updateConnectedUsers(editor) {
       this.$store.commit(
         "setConnectedUsers",
         editor.storage.collaborationCursor.users
-      );
+      )
     },
     async wordToHTML() {
-      let ctx = this;
+      let ctx = this
       if (
         ctx.pickedFile?.mime_type ===
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -490,24 +681,24 @@ export default {
           "Content-Type": "application/json; charset=utf-8",
           "X-Frappe-Site-Name": window.location.hostname,
           Range: "bytes=0-10000000",
-        };
+        }
         const res = await fetch(
           `/api/method/drive.api.files.get_file_content?entity_name=${ctx.pickedFile.name}`,
           {
             method: "GET",
             headers,
           }
-        );
+        )
         if (res.ok) {
-          let blob = await res.arrayBuffer();
-
+          let blob = await res.arrayBuffer()
+          const { convertToHtml } = await import("mammoth")
           convertToHtml({ arrayBuffer: blob })
             .then(function (result) {
-              ctx.editor.commands.insertContent(result.value);
+              ctx.editor.commands.insertContent(result.value)
             })
             .catch(function (error) {
-              console.error(error);
-            });
+              console.error(error)
+            })
           //.then((x) => console.log("docx: finished"));
         }
       } else {
@@ -517,131 +708,124 @@ export default {
           icon: "alert-triangle",
           iconClasses: "text-red-500",
           timeout: 2,
-        });
+        })
       }
     },
     saveDoc(e) {
       if (!(e.keyCode === 83 && (e.ctrlKey || e.metaKey))) {
-        return;
+        return
       }
-      e.preventDefault();
-      this.$emit("saveDocument");
+      e.preventDefault()
+      this.$emit("update:rawContent", this.editor.getHTML())
+      this.$emit("update:yjsContent", Y.encodeStateAsUpdate(this.document))
+      this.$emit("mentionedUsers", this.parseMentions(this.editor.getJSON()))
+      if (this.synced || this.peercount === 0) {
+        this.$emit("saveDocument")
+      }
+      toast({
+        title: "Document saved",
+        position: "bottom-right",
+        timeout: 2,
+      })
     },
     printHtml(dom) {
       const style = Array.from(document.querySelectorAll("style, link")).reduce(
         (str, style) => str + style.outerHTML,
         ""
-      );
-      const content = style + dom.outerHTML;
+      )
+      const content = style + dom.outerHTML
 
-      const iframe = document.createElement("iframe");
-      iframe.id = "el-tiptap-iframe";
+      const iframe = document.createElement("iframe")
+      iframe.id = "el-tiptap-iframe"
       iframe.setAttribute(
         "style",
         "position: absolute; width: 0; height: 0; top: -10px; left: -10px;"
-      );
-      document.body.appendChild(iframe);
+      )
+      document.body.appendChild(iframe)
 
-      const frameWindow = iframe.contentWindow;
+      const frameWindow = iframe.contentWindow
       const doc =
         iframe.contentDocument ||
-        (iframe.contentWindow && iframe.contentWindow.document);
+        (iframe.contentWindow && iframe.contentWindow.document)
 
       if (doc) {
-        doc.open();
-        doc.write(content);
-        doc.close();
+        doc.open()
+        doc.write(content)
+        doc.close()
       }
 
       if (frameWindow) {
         iframe.onload = function () {
           try {
             setTimeout(() => {
-              frameWindow.focus();
+              frameWindow.focus()
               try {
                 if (!frameWindow.document.execCommand("print", false)) {
-                  frameWindow.print();
+                  frameWindow.print()
                 }
               } catch (e) {
-                frameWindow.print();
+                frameWindow.print()
               }
-              frameWindow.close();
-            }, 10);
+              frameWindow.close()
+            }, 10)
           } catch (err) {
-            console.error(err);
+            console.error(err)
           }
 
           setTimeout(function () {
-            document.body.removeChild(iframe);
-          }, 100);
-        };
+            document.body.removeChild(iframe)
+          }, 100)
+        }
       }
     },
-
     printEditorContent() {
-      const editorContent = document.getElementById("editor-capture");
+      const editorContent = document.getElementById("editor-capture")
       if (editorContent) {
-        this.printHtml(editorContent);
-        return true;
+        this.printHtml(editorContent)
+        return true
       }
-      return false;
+      return false
     },
-    shouldShow({ view, state, from, to }) {
-      const { doc, selection } = state;
-      const { empty } = selection;
-
-      // Sometime check for `empty` is not enough.
-      // Doubleclick an empty paragraph returns a node size of 2.
-      // So we check also for an empty text size.
-      const isEmptyTextBlock =
-        !doc.textBetween(from, to).length && isTextSelection(state.selection);
-      const isMediaSelected =
-        this.editor.isActive("image") ||
-        this.editor.isActive("video") ||
-        this.editor.isActive("resizableMedia");
-      if (isMediaSelected) {
-        return false;
-      } else {
-        return !(!view.hasFocus() || empty || isEmptyTextBlock);
+    shouldShow: ({ state }) => {
+      const { from, to } = state.selection
+      // Check if the selection is within a text node
+      const node = state.doc.nodeAt(from)
+      if (node && node.type.name === "text") {
+        // Ensure the selection is not empty
+        return from !== to
       }
+      return false // Hide the menu if the selection is outside a text node
     },
-    toggleCommentMenu() {
-      if (this.showCommentMenu === true) {
-        this.showCommentMenu = false;
-      }
-    },
-    getRandomColor() {
-      const list = [
-        "#e11d48",
-        "#20C1F4",
-        "#2374D2",
-        "#fbbf24",
-        "#79AC78",
-        "#EF7323",
-        "#FF90BC",
-        "#527853",
-        "#8DDFCB",
-      ];
-      return list[Math.floor(Math.random() * list.length)];
+    RndColor() {
+      const max = 255
+      const min = 100
+      const range = max - min
+      const red = Math.floor(Math.random() * range) + min
+      const green = Math.floor(Math.random() * range) + min
+      const blue = Math.floor(Math.random() * range) + min
+      const redToHex = red.toString(16)
+      const greenToHex = green.toString(16)
+      const blueToHex = blue.toString(16)
+      return "#" + redToHex + greenToHex + blueToHex
     },
     discardComment() {
-      this.commentText = "";
-      this.isCommentModeOn = false;
+      this.commentText = ""
+      this.isCommentModeOn = false
     },
     getIsCommentModeOn() {
-      return this.isCommentModeOn;
+      return this.isCommentModeOn
     },
     focusContent({ from, to }) {
-      this.editor.chain().setTextSelection({ from, to }).run();
+      this.editor.chain().setTextSelection({ from, to }).run()
     },
     findCommentsAndStoreValues() {
-      const tempComments = [];
+      const tempComments = []
       this.editor.state.doc.descendants((node, pos) => {
-        const { marks } = node;
+        const { marks } = node
         marks.forEach((mark) => {
           if (mark.type.name === "comment") {
-            const markComments = mark.attrs.comment;
-            const jsonComments = markComments ? JSON.parse(markComments) : null;
+            const markComments = mark.attrs.comment
+            const jsonComments = markComments ? JSON.parse(markComments) : null
             if (
               jsonComments !== null &&
               !tempComments.find(
@@ -654,53 +838,72 @@ export default {
                 from: pos,
                 to: pos + (node.text?.length || 0),
                 text: node.text,
-              });
+              })
             }
           }
-        });
-      });
-      return (this.allComments = tempComments);
+        })
+      })
+      return (this.allComments = tempComments)
+    },
+    setCurrentAnnotation() {
+      let newVal = this.editor.isActive("annotation")
+      const sideBarState =
+        this.$store.state.showInfo && this.$refs.MenuBar.tab == 5
+      if (newVal && sideBarState) {
+        this.activeAnnotation =
+          this.editor.getAttributes("annotation").annotationID
+      }
+    },
+    //Click
+    setAndFocusCurrentAnnotation() {
+      let newVal = this.editor.isActive("annotation")
+      if (newVal) {
+        this.$store.state.showInfo = true
+        this.$refs.MenuBar.tab = 5
+        this.activeAnnotation =
+          this.editor.getAttributes("annotation").annotationID
+      }
     },
     setCurrentComment() {
-      let newVal = this.editor.isActive("comment");
+      let newVal = this.editor.isActive("comment")
       if (newVal) {
-        this.$store.state.showInfo = true;
-        this.$refs.MenuBar.tab = 1;
+        this.$store.state.showInfo = true
+        this.$refs.MenuBar.tab = 5
         const parsedComment = JSON.parse(
           this.editor.getAttributes("comment").comment
-        );
+        )
         parsedComment.comments =
           typeof parsedComment.comments === "string"
             ? JSON.parse(parsedComment.comments)
-            : parsedComment.comments;
-        this.activeCommentsInstance = parsedComment;
+            : parsedComment.comments
+        this.activeCommentsInstance = parsedComment
       } else {
-        this.activeCommentsInstance = {};
+        this.activeCommentsInstance = {}
       }
     },
     setComment(val) {
-      const localVal = val || this.commentText;
-      if (!localVal.trim().length) return;
+      const localVal = val || this.commentText
+      if (!localVal.trim().length) return
       const currentSelectedComment = JSON.parse(
         JSON.stringify(this.activeCommentsInstance)
-      );
+      )
       const commentsArray =
         typeof currentSelectedComment.comments === "string"
           ? JSON.parse(currentSelectedComment.comments)
-          : currentSelectedComment.comments;
+          : currentSelectedComment.comments
       if (commentsArray) {
         commentsArray.push({
           userName: this.currentUserName,
           userImage: this.currentUserImage,
           time: Date.now(),
           content: localVal,
-        });
+        })
         const commentWithUuid = JSON.stringify({
           uuid: this.activeCommentsInstance.uuid || uuidv4(),
           comments: commentsArray,
-        });
-        this.editor.chain().setComment(commentWithUuid).run();
-        this.commentText = "";
+        })
+        this.editor.chain().setComment(commentWithUuid).run()
+        this.commentText = ""
       } else {
         const commentWithUuid = JSON.stringify({
           uuid: uuidv4(),
@@ -712,13 +915,49 @@ export default {
               content: localVal,
             },
           ],
-        });
-        this.editor.chain().setComment(commentWithUuid).run();
-        this.commentText = "";
+        })
+        this.editor.chain().setComment(commentWithUuid).run()
+        this.commentText = ""
+      }
+    },
+    parseMentions(data) {
+      const tempMentions = (data.content || []).flatMap(this.parseMentions)
+      if (data.type === "mention") {
+        tempMentions.push({
+          id: data.attrs.id,
+          author: data.attrs.author,
+          type: data.attrs.type,
+        })
+      }
+      const uniqueMentions = [
+        ...new Set(tempMentions.map((item) => item.id)),
+      ].map((id) => tempMentions.find((item) => item.id === id))
+      return uniqueMentions
+    },
+    evalImplicitTitle() {
+      this.implicitTitle = this.editor.state.doc.textContent.trim().slice(0, 35)
+      this.implicitTitle = this.implicitTitle.trim()
+      if (this.implicitTitle.charAt(0) === "@") {
+        return
+      }
+      if (this.implicitTitle.length && this.$store.state.passiveRename) {
+        this.$store.state.entityInfo[0].title = this.implicitTitle
+        this.$resources.rename.submit({
+          entity_name: this.entityName,
+          new_title: this.implicitTitle,
+        })
       }
     },
   },
-};
+  resources: {
+    rename() {
+      return {
+        url: "drive.api.files.passive_rename",
+        debounce: 500,
+      }
+    },
+  },
+}
 </script>
 
 <style>
@@ -728,64 +967,27 @@ export default {
   word-break: break-word;
   -webkit-user-select: none;
   -ms-user-select: none;
-  user-select: none;
-  padding: 2em 1em;
-  font-size: 14px;
+  user-select: text;
+  padding: 4em 1em;
   background: white;
-  min-width: 21cm;
-  max-width: 21cm;
-  min-height: 29.7cm;
-  max-height: 29.7cm;
+}
+
+/* 640 is sm from espresso design */
+@media only screen and (max-width: 640px) {
+  .ProseMirror {
+    display: block;
+    max-width: 100%;
+    min-width: 100%;
+  }
+}
+
+.ProseMirror a {
+  text-decoration: underline;
 }
 
 /* Firefox */
 .ProseMirror-focused:focus-visible {
   outline: none;
-}
-
-.ProseMirror h1 {
-  font-size: 24px;
-  font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0em;
-}
-
-.ProseMirror h2 {
-  font-size: 20px;
-  font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0em;
-}
-
-.ProseMirror h3 {
-  font-size: 16px;
-  font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0em;
-}
-
-.ProseMirror blockquote {
-  border-left: 2px solid lightgray;
-  padding-left: 10px;
-}
-
-.ProseMirror strong {
-  font-weight: 600;
-}
-
-.ProseMirror code,
-pre {
-  white-space: pre;
-}
-
-.ProseMirror hr {
-  margin: 10px 0px;
-}
-
-.ProseMirror ul,
-ol {
-  list-style-type: revert;
-  padding: revert;
 }
 
 @page {
@@ -801,14 +1003,21 @@ ol {
     margin: none !important;
   }
 }
-
+/* 
 span[data-comment] {
-  background: rgb(228, 245, 233);
-  user-select: all;
-  padding: 0 2px 0 2px;
-  border-radius: 5px;
-  cursor: pointer;
+  background: rgba(255, 215, 0, 0.15);
+  border-bottom: 2px solid rgb(255, 210, 0);
+  user-select: text;
+  padding: 2px;
 }
+ */
+span[data-annotation-id] {
+  background: rgba(255, 215, 0, 0.15);
+  border-bottom: 2px solid rgb(255, 210, 0);
+  user-select: text;
+  padding: 2px;
+}
+
 .collaboration-cursor__caret {
   border-left: 0px solid currentColor;
   border-right: 2px solid currentColor;
@@ -820,14 +1029,15 @@ span[data-comment] {
 }
 /* Render the username above the caret */
 .collaboration-cursor__label {
-  border-radius: 50px;
-  color: #000000a2;
-  font-size: 0.8rem;
+  border-radius: 60px;
+  border: 2px solid #0000001a;
+  color: #ffffffdf;
+  font-size: 0.65rem;
   font-style: normal;
   font-family: "Inter";
-  font-weight: 600;
+  font-weight: 500;
   line-height: normal;
-  padding: 0.05rem 0.5rem 0.1rem 0.5rem;
+  padding: 0.1rem 0.25rem;
   position: absolute;
   top: -1.5em;
   left: 0.25em;
@@ -839,27 +1049,67 @@ span[data-comment] {
 .my-task-item {
   display: flex;
 }
-
 .my-task-item input {
-  border-radius: 10px;
-  outline: none;
-  cursor: pointer;
-  margin-right: 5px;
+  border-radius: 4px;
+  outline: 0;
+  margin-right: 10px;
 }
 .my-task-item input[type="checkbox"]:hover {
-  outline: none;
-  background-color: #0d0d0d;
+  outline: 0;
+  background-color: #d6d6d6;
+  cursor: pointer;
+  transition: background 0.2s ease, border 0.2s ease;
 }
 .my-task-item input[type="checkbox"]:focus {
-  outline: none;
-  background-color: #0d0d0d;
+  outline: 0;
+  background-color: #5b5b5b;
 }
 .my-task-item input[type="checkbox"]:active {
-  outline: none;
-  background-color: #0d0d0d;
+  outline: 0;
+  background-color: #5b5b5b;
 }
 .my-task-item input[type="checkbox"]:checked {
+  outline: 0;
+  background-color: #000000;
+}
+
+summary {
+  display: flex;
+  width: 100%;
+  padding: 0 2.5rem;
+  box-sizing: border-box;
+  pointer-events: none;
   outline: none;
-  background-color: #0d0d0d;
+}
+
+summary p {
+  margin-top: 0.15rem !important;
+  margin-bottom: 0.15rem !important;
+}
+
+.grip-row.selected {
+  background-color: #e3f0fce2;
+  content: "✓";
+}
+.grip-column.selected {
+  background-color: #e3f0fce2;
+}
+
+.grip-column.selected::before {
+  content: "✓";
+  position: absolute;
+  color: white;
+  top: -25%;
+  left: 0%;
+  font-weight: 600;
+}
+
+.grip-row.selected::before {
+  content: "✓";
+  position: absolute;
+  color: white;
+  top: -25%;
+  left: 0%;
+  font-weight: 600;
 }
 </style>

@@ -1,34 +1,48 @@
-import { createRouter, createWebHistory } from "vue-router";
-import store from "./store";
+import { createRouter, createWebHistory } from "vue-router"
+import store from "./store"
 
-function redir404(to) {
+function redir404(to, from) {
+  if (to.name === "Error" && from.name) {
+    return
+  }
   if (store.getters.isLoggedIn && to.fullPath === "/") {
-    return { name: "Home" };
+    return { name: "Home" }
   } else if (!store.getters.isLoggedIn && to.fullPath === "/") {
-    return;
+    return { name: "Login" }
+  } else {
+    return { name: "Login" }
+  }
+}
+
+function clearStore(to, from) {
+  if (from.name === "Document" || to.name === "Document") {
+    store.commit("setShowInfo", false)
+    return
+  } else {
+    store.commit("setEntityInfo", [])
+    store.commit("setCurrentFolder", [])
   }
 }
 
 function setRootBreadCrumb(to) {
   if (store.getters.isLoggedIn) {
-    document.title = to.name;
-    store.commit("setCurrentBreadcrumbs", [{ label: to.name, route: to.path }]);
+    document.title = to.name
+    store.commit("setCurrentBreadcrumbs", [{ label: to.name, route: to.path }])
   }
 }
 
 const routes = [
   {
+    path: "/notifications",
+    name: "Notifications",
+    component: () => import("@/pages/Notifications.vue"),
+    beforeEnter: [setRootBreadCrumb, clearStore],
+  },
+  {
     path: "/home",
     name: "Home",
     component: () => import("@/pages/Home.vue"),
-    beforeEnter: [setRootBreadCrumb],
-  },
-  {
-    path: "/:pathMatch(.*)*/",
-    name: "Error",
-    component: () => import("@/pages/Error.vue"),
-    beforeEnter: [redir404],
-    props: true,
+    beforeEnter: [setRootBreadCrumb, clearStore],
   },
   {
     path: "/file/:entityName",
@@ -50,18 +64,19 @@ const routes = [
     meta: { sidebar: false, documentPage: true, isHybridRoute: true },
     component: () => import("@/pages/Document.vue"),
     props: true,
+    beforeEnter: [clearStore],
   },
   {
-    path: "/recent",
-    name: "Recent",
-    component: () => import("@/pages/Recent.vue"),
-    beforeEnter: [setRootBreadCrumb],
+    path: "/recents",
+    name: "Recents",
+    component: () => import("@/pages/Recents.vue"),
+    beforeEnter: [setRootBreadCrumb, clearStore],
   },
   {
     path: "/shared",
     name: "Shared",
     component: () => import("@/pages/Shared.vue"),
-    beforeEnter: [setRootBreadCrumb],
+    beforeEnter: [setRootBreadCrumb, clearStore],
   },
   {
     path: "/favourites",
@@ -73,15 +88,7 @@ const routes = [
     path: "/trash",
     name: "Trash",
     component: () => import("@/pages/Trash.vue"),
-    beforeEnter: [setRootBreadCrumb],
-  },
-  {
-    path: "/login",
-    name: "Login",
-    component: () => import("@/pages/Login.vue"),
-    meta: {
-      isPublicRoute: true,
-    },
+    beforeEnter: [setRootBreadCrumb, clearStore],
   },
   {
     path: "/signup",
@@ -97,28 +104,54 @@ const routes = [
     component: () => import("@/pages/Test.vue"),
   },
   {
-    path: "/workspace",
-    name: "Workspace",
+    path: "/login",
+    name: "Login",
     redirect: () => {
-      window.location.href = "/app";
+      window.location.href = "/login"
     },
   },
-];
+  {
+    path: "/:pathMatch(.*)*/",
+    name: "Error",
+    component: () => import("@/pages/Error.vue"),
+    beforeEnter: [redir404, clearStore],
+    props: true,
+  },
+]
 
 let router = createRouter({
   history: createWebHistory("/drive"),
   routes,
-});
+  /*   scrollBehavior(to, from) {
+    return new Promise((resolve) => {
+      // Set a delay of 1000ms before scrolling
+      setTimeout(() => {
+        const element = document.getElementById('main');
+        console.log(element)
+        const { top } = element.getBoundingClientRect();
+        const scrollY = window.scrollY + top + 100; 
+        console.log('Scroll position:', scrollY);
+        element.scrollTo({
+          top: element.scrollTop + 8000, // Scroll down by the specified amount
+          behavior: 'instant',
+ // Enable smooth scrolling
+        });
+        // Always scroll to the element with ID 'main', 10 pixels above
+        resolve();
+      }, 1000); // 1000ms delay
+    });
+  }, */
+})
 
-const HybridRouteArray = ["File", "Folder", "Document"];
+const HybridRouteArray = ["File", "Folder", "Document"]
 
 router.beforeEach((to, from, next) => {
   // If they hit a public page log them in
   if (to.matched.some((record) => record.meta.isPublicRoute)) {
     if (store.getters.isLoggedIn) {
-      next({ name: "Home" });
+      next({ name: "Home" })
     } else {
-      next();
+      next()
     }
   } else {
     // Prepend "Shared/" to the breadcrumbs if an authenticated user navigated to a file by pasting a link
@@ -130,23 +163,23 @@ router.beforeEach((to, from, next) => {
         if (from.fullPath === "/" && HybridRouteArray.includes(to.name)) {
           store.commit("setCurrentBreadcrumbs", [
             { label: "Shared", route: "/shared" },
-          ]);
+          ])
         }
       }
-      next();
+      next()
     } else {
       if (to.name === "Error") {
-        next();
+        next()
       } else {
-        next("/login");
+        next("/login")
       }
       //import.meta.env.DEV ? next("/login") : (window.location.href = "/login");
     }
   }
-});
+})
 
-router.afterEach((to, from, failure) => {
-  sessionStorage.setItem("currentRoute", to.href);
-});
+router.afterEach((to) => {
+  sessionStorage.setItem("currentRoute", to.href)
+})
 
-export default router;
+export default router

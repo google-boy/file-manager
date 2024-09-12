@@ -1,329 +1,344 @@
 <template>
-  <Transition
-    enter-from-class="translate-x-[150%] opacity-0"
-    leave-to-class="translate-x-[150%] opacity-0"
-    enter-active-class="transition duration-125"
-    leave-active-class="transition duration-125">
-    <div
-      v-if="showInfoSidebar"
-      class="min-w-[300px] max-w-[300px] min-h-full border-l overflow-auto">
-      <div v-if="typeof entity === 'number'">
-        <div class="w-full p-4 border-b overflow-visible">
-          <div class="flex items-center">
-            <div class="font-medium truncate text-lg">
-              {{ store.state.entityInfo.length }} items selected
+  <div
+    class="transition-all duration-200 ease-in-out h-full border-l"
+    :class="
+      showInfoSidebar
+        ? 'sm:min-w-[352px] sm:max-w-[352px] min-w-full opacity-100'
+        : 'w-0 min-w-0 max-w-0 overflow-hidden opacity-0'
+    "
+  >
+    <div v-if="typeof entity === 'number'">
+      <div class="w-full px-5 py-4 border-b overflow-visible">
+        <div class="flex items-center">
+          <div class="font-medium truncate text-lg">
+            {{ store.state.entityInfo.length }} items selected
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else-if="entity">
+      <div class="w-full px-5 py-4 border-b">
+        <div class="flex items-center">
+          <div class="font-medium truncate text-lg">
+            {{ entity.title }}
+          </div>
+          <Button
+            icon="x"
+            variant="ghost"
+            class="ml-auto sm:hidden"
+            @click="$store.commit('setShowInfo', false)"
+          />
+        </div>
+      </div>
+      <!-- Information -->
+      <div v-if="tab === 0" class="h-full border-b px-5 pt-4 pb-5 w-full">
+        <span
+          class="inline-flex items-center gap-2.5 mb-5 text-gray-800 font-medium text-lg w-full"
+        >
+          <Info />
+          Information
+        </span>
+        <div
+          v-if="
+            (entity.mime_type?.startsWith('video') ||
+              (entity.mime_type?.startsWith('image') &&
+                entity?.mime_type !== 'image/svg+xml')) &&
+            showInfoSidebar
+          "
+          class="h-[210px] w-full mb-4"
+        >
+          <img class="object-contain h-full mx-auto" :src="thumbnailLink" />
+        </div>
+        <div class="space-y-6.5">
+          <div v-if="entity.owner === 'You'">
+            <div class="text-base font-medium mb-4">Access</div>
+            <div class="flex items-center justify-start">
+              <Avatar
+                size="lg"
+                :label="entity.owner"
+                :image="entity.user_image"
+              />
+              <div class="border-l h-6 mx-1.5"></div>
+              <GeneralAccess
+                v-if="
+                  !generalAccess.loading &&
+                  (!!generalAccess.data?.length || !sharedWithList?.length)
+                "
+                size="lg"
+                class="-mr-[3px] outline outline-white"
+                :general-access="generalAccess?.data?.[0]"
+              />
+              <div
+                v-if="sharedWithList?.length && !sharedWithList.loading"
+                class="flex items-center justify-start"
+              >
+                <Avatar
+                  v-for="user in sharedWithList.slice(0, 3)"
+                  :key="user?.user_name"
+                  size="lg"
+                  :label="user?.full_name ? user?.full_name : user?.user_name"
+                  :image="user?.user_image"
+                  class="-mr-[3px] outline outline-white"
+                />
+
+                <Avatar
+                  v-if="sharedWithList.slice(3).length"
+                  size="lg"
+                  :label="sharedWithList.slice(3).length.toString()"
+                  class="-mr-[3px] outline outline-white"
+                />
+              </div>
+
+              <!-- <Button class="ml-auto" @click="showShareDialog = true">
+                  Share
+                </Button> -->
+            </div>
+          </div>
+          <!-- <div v-if="entityTags.data?.length || entity.owner === 'You'">
+              <div class="text-base font-medium mb-4">Tags</div>
+              <div class="flex items-center justify-start flex-wrap gap-y-4">
+                <div
+                  v-if="entityTags.data?.length"
+                  class="flex flex-wrap gap-2 max-w-full"
+                >
+                  <Tag
+                    v-for="tag in entityTags?.data"
+                    :key="tag"
+                    :tag="tag"
+                    :entity="entity"
+                    @success="
+                      () => {
+                        userTags.fetch()
+                        entityTags.fetch()
+                      }
+                    "
+                  />
+                </div>
+                <span v-else-if="!addTag" class="text-gray-700 text-base">
+                  This file has no tags
+                </span>
+                <Button
+                  v-if="!addTag && entity.owner === 'You'"
+                  class="ml-auto"
+                  @click="addTag = true"
+                >
+                  Add tag
+                </Button>
+                <TagInput
+                  v-if="addTag"
+                  :entity="entity"
+                  :unadded-tags="unaddedTags"
+                  @success="
+                    () => {
+                      userTags.fetch()
+                      entityTags.fetch()
+                      addTag = false
+                    }
+                  "
+                  @close="addTag = false"
+                />
+              </div>
+            </div>  -->
+          <div>
+            <div class="text-base font-medium mb-4">Properties</div>
+            <div class="text-base grid grid-flow-row grid-cols-2 gap-y-3">
+              <span class="col-span-1 text-gray-600">Type</span>
+              <span class="col-span-1">{{ formattedMimeType }}</span>
+              <span v-if="entity.file_size" class="col-span-1 text-gray-600">
+                Size
+              </span>
+              <span v-if="entity.file_size" class="col-span-1">
+                {{ entity.file_size }}
+              </span>
+              <span class="col-span-1 text-gray-600">Modified</span>
+              <span class="col-span-1">{{ entity.modified }}</span>
+              <span class="col-span-1 text-gray-600">Created</span>
+              <span class="col-span-1">{{ entity.creation }}</span>
+              <span class="col-span-1 text-gray-600">Owner</span>
+              <span class="col-span-1">{{ entity.full_name }}</span>
             </div>
           </div>
         </div>
       </div>
-      <div v-else-if="entity">
-        <div class="w-full p-4 border-b overflow-visible">
-          <div class="flex items-center">
-            <svg
-              v-if="entity.is_group"
-              :style="{ fill: entity.color }"
-              :draggable="false"
-              class="h-5 mr-2.5"
-              viewBox="0 0 40 40"
-              xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M19.8341 7.71154H3C2.72386 7.71154 2.5 7.9354 2.5 8.21154V34.75C2.5 35.8546 3.39543 36.75 4.5 36.75H35.5C36.6046 36.75 37.5 35.8546 37.5 34.75V4.75C37.5 4.47386 37.2761 4.25 37 4.25H24.7258C24.6719 4.25 24.6195 4.26739 24.5764 4.29957L20.133 7.61239C20.0466 7.67676 19.9418 7.71154 19.8341 7.71154Z" />
-            </svg>
-            <img
-              v-else
-              :src="getIconUrl(formatMimeType(entity.mime_type))"
-              :draggable="false"
-              class="h-5 mr-2.5" />
-            <div class="font-medium truncate text-lg">
-              {{ entity.title }}
-            </div>
-          </div>
-        </div>
-        <div v-if="tab === 0" class="h-full border-b">
-          <!--           <div
-            class="p-4 z-10 sticky top-0 bg-white"
-            :class="
-              tab === 0
-                ? 'flex-auto'
-                : 'text-gray-600 cursor-pointer flex-none '
-            "
-            @click="tab = 0">
-            <div class="flex items-center">
-              <FeatherIcon name="alert-circle" class="h-4 mr-2 stroke-2" />
-              <span class="font-medium text-lg">Information</span>
-            </div>
-          </div> -->
+      <!-- Comments -->
+      <div
+        v-if="tab === 1"
+        class="max-h-[90vh] pt-4 pb-5 border-b overflow-y-auto overflow-x-hidden"
+      >
+        <span
+          class="inline-flex items-center gap-2.5 px-5 mb-5 text-gray-800 font-medium text-lg w-full"
+        >
+          <Comment />
+          Comments
+        </span>
+        <div v-if="entity.allow_comments" class="pb-2 px-5">
           <div
-            v-if="
-              (entity.mime_type?.startsWith('video') ||
-                (entity.mime_type?.startsWith('image') &&
-                  entity?.mime_type !== 'image/svg+xml')) &&
-              showInfoSidebar
-            "
-            class="relative p-0.5 aspect-video object-contain m-auto w-full flex items-center justify-center">
-            <img class="h-auto max-h-full w-auto" :src="thumbnailLink" />
-          </div>
-          <div class="p-4 space-y-8">
-            <div v-if="entity.owner === 'Me'">
-              <div class="text-base font-medium mb-2">Manage Access</div>
-              <div class="flex flex-row">
-                <Button
-                  icon-left="share-2"
-                  class="h-7"
-                  @click="showShareDialog = true">
-                  Share
-                </Button>
-              </div>
-            </div>
-
-            <div v-if="entity.owner === 'Me' || entityTags.data?.length">
-              <div class="text-base font-medium mb-2">Tags</div>
-              <div class="flex flex-wrap gap-2">
-                <Tag
-                  v-for="tag in entityTags?.data"
-                  :key="tag"
-                  :tag="tag"
-                  :entity="entity"
-                  @success="
-                    () => {
-                      userTags.fetch();
-                      entityTags.fetch();
-                    }
-                  " />
-                <Badge
-                  v-if="!addTag && entity.owner === 'Me'"
-                  class="flex items-center content-center cursor-pointer font-medium"
-                  @click="addTag = true">
-                  <FeatherIcon
-                    v-if="entity.owner === 'Me'"
-                    class="h-3 stroke-2"
-                    name="plus" />
-                  Add tag
-                </Badge>
-              </div>
-
-              <TagInput
-                v-if="addTag"
-                :class="{ 'w-full': entityTags.data?.length }"
-                :entity="entity"
-                :unadded-tags="unaddedTags"
-                @success="
-                  () => {
-                    userTags.fetch();
-                    entityTags.fetch();
-                    addTag = false;
-                  }
-                "
-                @close="addTag = false" />
-            </div>
-            <div>
-              <div class="text-base font-medium mb-2">Properties</div>
-              <div class="flex text-base">
-                <div class="w-1/2 text-gray-600 space-y-2">
-                  <div>Type</div>
-                  <div v-if="entity.file_size">Size</div>
-                  <div>Modified</div>
-                  <div>Created</div>
-                  <div>Owner</div>
-                </div>
-                <div class="w-1/2 space-y-2">
-                  <div>{{ formattedMimeType }}</div>
-                  <div>{{ entity.file_size }}</div>
-                  <div>{{ entity.modified }}</div>
-                  <div>{{ entity.creation }}</div>
-                  <div>{{ entity.owner }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-if="tab === 1" class="h-full pb-12">
-          <div class="flex items-center pl-4 pt-4 sticky top-0 bg-white">
-            <span class="font-medium text-base mb-2">Comments</span>
-          </div>
-          <div
-            v-if="entity.allow_comments"
-            class="px-4 overflow-y-auto pb-4 space-y-6">
-            <div
-              v-for="comment in comments.data"
-              :key="comment"
-              class="flex gap-3 items-center">
+            v-for="comment in comments.data"
+            :key="comment"
+            class="flex flex-col mb-5"
+          >
+            <div class="flex items-start justify-start">
               <Avatar
                 :label="comment.comment_by"
                 :image="comment.user_image"
-                class="h-7 w-7" />
-              <div>
-                <span class="text-sm font-medium">
-                  {{ comment.comment_by }}
-                </span>
-                <span class="text-gray-500 text-sm">{{ " ∙ " }}</span>
-                <span class="text-gray-700 text-sm">
-                  {{ comment.creation }}
-                </span>
-                <div class="text-base text-gray-700">
-                  {{ comment.content }}
+                class="h-7 w-7"
+              />
+              <div class="ml-3">
+                <div class="flex items-center justify-start text-base gap-x-1">
+                  <span class="font-medium">{{ comment.comment_by }}</span>
+                  <span>{{ "∙" }}</span>
+                  <span class="text-gray-600">{{ comment.creation }}</span>
                 </div>
+                <span
+                  class="my-2 text-base text-gray-700 break-word leading-snug"
+                >
+                  {{ comment.content }}
+                </span>
               </div>
-            </div>
-            <div v-if="userId != 'Guest'" class="flex items-center gap-3 my-4">
-              <Avatar :label="fullName" :image="imageURL" class="h-7 w-7" />
-              <div class="flex">
-                <Input
-                  v-model="newComment"
-                  type="text"
-                  placeholder="Add comment"
-                  @keydown.enter="postComment" />
-              </div>
-              <Button @click="postComment" variant="solid">Add</Button>
             </div>
           </div>
-          <div v-else class="text-gray-600 text-sm p-4 border-b">
-            Comments have been disabled for this
-            {{ entity.is_group ? "folder" : "file" }} by its owner.
+          <div
+            v-if="userId != 'Guest'"
+            class="flex items-center justify-start py-2"
+          >
+            <Avatar :label="fullName" :image="imageURL" class="h-7 w-7 mr-3" />
+            <div
+              class="flex items-center border w-full bg-transparent rounded mr-1 focus-within:ring-2 ring-gray-400 hover:bg-gray-100 focus-within:bg-gray-100 group"
+            >
+              <textarea
+                v-model="newComment"
+                class="w-full form-textarea bg-transparent resize-none border-none hover:bg-transparent focus:ring-0 focus:shadow-none focus:bg-transparent"
+                placeholder="Add a comment"
+                @input="resize($event)"
+                @keypress.enter.stop.prevent="postComment"
+              />
+              <Button
+                class="hover:bg-transparent"
+                variant="ghost"
+                icon="arrow-up-circle"
+                :disabled="!newComment.length"
+                @click="postComment"
+              ></Button>
+            </div>
           </div>
         </div>
-      </div>
-      <div
-        v-else
-        class="flex h-full w-full flex-col items-center justify-center rounded-lg text-center">
-        <svg viewBox="0 0 78 85" class="w-1/6 fill-transparent stroke-2 pb-6">
-          <path
-            d="M42 31H66 M42 51H66 M42 25H55 M42 45H55 M65 9V8C65 4.13401 61.866 1 58 1H8C4.13401 1 1 4.13401 1 8V66C1 69.866 4.13401 73 8 73H10 M70 12H20C16.134 12 13 15.134 13 19V77C13 80.866 16.134 84 20 84H70C73.866 84 77 80.866 77 77V19C77 15.134 73.866 12 70 12Z"
-            stroke="#404040" />
-          <path
-            d="M32 43H26C24.8954 43 24 43.8954 24 45V51C24 52.1046 24.8954 53 26 53H32C33.1046 53 34 52.1046 34 51V45C34 43.8954 33.1046 43 32 43Z M32 23H26C24.8954 23 24 23.8954 24 25V31C24 32.1046 24.8954 33 26 33H32C33.1046 33 34 32.1046 34 31V25C34 23.8954 33.1046 23 32 23Z"
-            stroke="#404040" />
-        </svg>
-        <p class="text-base text-gray-700 font-medium">No file selected</p>
-        <p class="text-sm text-gray-600">
-          Select a file to get more information
-        </p>
+        <div v-else class="text-gray-600 text-sm px-5">
+          Comments have been disabled for this
+          {{ entity.is_group ? "folder" : "file" }} by its owner.
+        </div>
       </div>
     </div>
-  </Transition>
+    <div
+      v-else
+      class="flex h-full w-full flex-col items-center justify-center rounded-lg text-center"
+    >
+      <File class="w-auto h-10 text-gray-600 mb-2" />
+      <p class="text-sm text-gray-600 font-medium">No file selected</p>
+    </div>
+  </div>
 
   <div
-    class="flex flex-col items-center h-full overflow-y-hidden border-l z-0 max-w-[50px] min-w-[50px] p-2 bg-white">
+    class="hidden sm:flex flex-col items-center overflow-hidden h-full min-w-[48px] gap-1 pt-3 px-0 border-l z-0 bg-white"
+  >
     <Button
-      class="animate mb-2 py-4 text-gray-600"
+      class="text-gray-600"
       :class="[
         tab === 0 && showInfoSidebar
           ? 'text-black bg-gray-200'
           : ' hover:bg-gray-50',
       ]"
       variant="minimal"
-      @click="switchTab(0)">
-      <FeatherIcon
-        name="info"
-        :class="[
-          tab === 0 && showInfoSidebar ? 'text-gray-700' : 'text-gray-600',
-        ]"
-        class="text-gray-600 w-full h-full stroke-1.5" />
-    </Button>
+      @click="switchTab(0)"
+      ><Info
+    /></Button>
     <Button
-      class="animate mb-2 text-gray-600 py-4"
+      v-if="showComments"
+      class="text-gray-600"
       :class="[
         tab === 1 && showInfoSidebar
           ? 'text-black bg-gray-200'
           : ' hover:bg-gray-50',
       ]"
       variant="minimal"
-      @click="switchTab(1)">
-      <FeatherIcon
-        name="message-circle"
-        :class="[
-          tab === 1 && showInfoSidebar ? 'text-gray-700' : 'text-gray-600',
-        ]"
-        class="text-gray-600 w-full h-full stroke-1.5" />
-    </Button>
+      @click="switchTab(1)"
+      ><Comment
+    /></Button>
   </div>
-
-  <ShareDialog
-    v-if="showShareDialog && entity"
-    v-model="showShareDialog"
-    :entity-name="entity.name" />
 </template>
 
 <script setup>
-import {
-  ref,
-  computed,
-  onMounted,
-  defineProps,
-  onBeforeUnmount,
-  watch,
-} from "vue";
-import { useStore } from "vuex";
-import {
-  FeatherIcon,
-  Avatar,
-  call,
-  Input,
-  Badge,
-  createResource,
-} from "frappe-ui";
-import ShareDialog from "@/components/ShareDialog.vue";
-import TagInput from "@/components/TagInput.vue";
-import Tag from "@/components/Tag.vue";
-import { formatMimeType, formatDate } from "@/utils/format";
-import { getIconUrl } from "@/utils/getIconUrl";
-import { thumbnail_getIconUrl } from "@/utils/getIconUrl";
-
-const store = useStore();
-const tab = ref(0);
-const newComment = ref("");
-const showShareDialog = ref(false);
-const addTag = ref(false);
-const thumbnailLink = ref("");
+import { ref, computed, watch } from "vue"
+import { useStore } from "vuex"
+import { Avatar, call, createResource } from "frappe-ui"
+import { formatMimeType, formatDate } from "@/utils/format"
+import GeneralAccess from "@/components/GeneralAccess.vue"
+import { thumbnail_getIconUrl } from "@/utils/getIconUrl"
+import Info from "./EspressoIcons/Info.vue"
+import File from "./EspressoIcons/File.vue"
+import Comment from "./EspressoIcons/Comment.vue"
+const store = useStore()
+const tab = ref(0)
+const newComment = ref("")
+const thumbnailLink = ref("")
 
 const userId = computed(() => {
-  return store.state.auth.user_id;
-});
+  return store.state.auth.user_id
+})
 
 const fullName = computed(() => {
-  return store.state.auth.user_id;
-});
+  return store.state.user.fullName
+})
 
 const imageURL = computed(() => {
-  return store.state.user.imageURL;
-});
+  return store.state.user.imageURL
+})
 
 const showInfoSidebar = computed(() => {
-  return store.state.showInfo;
-});
+  return store.state.showInfo
+})
 
 const formattedMimeType = computed(() => {
-  if (entity.value.is_group) return "Folder";
-  const file = formatMimeType(entity.value.mime_type);
-  return file.charAt(0).toUpperCase() + file.slice(1);
-});
-
-const unaddedTags = computed(() => {
-  return userTags.data.filter(
-    ({ name: id1 }) => !entityTags.data.some(({ name: id2 }) => id2 === id1)
-  );
-});
+  if (entity.value.is_group) return "Folder"
+  const file = entity.value.file_kind
+  return file?.charAt(0).toUpperCase() + file?.slice(1)
+})
 
 const entity = computed(() => {
   if (store.state.entityInfo && store.state.entityInfo.length > 1) {
-    return store.state.entityInfo.length;
+    return store.state.entityInfo.length
   } else if (store.state.entityInfo?.length) {
-    return store.state.entityInfo[0];
+    return store.state.entityInfo[0]
   } else if (store.state.currentFolder?.length) {
-    return store.state.currentFolder[0];
+    return store.state.currentFolder[0]
   } else {
-    return false;
+    return false
   }
-});
+})
+
+const sharedWithList = computed(() => {
+  return userList.data?.users.concat(groupList.data)
+})
+
+const showComments = computed(() => {
+  if (entity.value.owner === "You") {
+    return true
+  } else if (entity.value.write) {
+    return true
+  } else if (entity.value.allow_comments) {
+    return true
+  } else {
+    return false
+  }
+})
 
 function switchTab(val) {
   if (store.state.showInfo == false) {
-    store.commit("setShowInfo", !store.state.showInfo);
-    tab.value = val;
+    store.commit("setShowInfo", !store.state.showInfo)
+    tab.value = val
   } else if (tab.value == val) {
-    store.commit("setShowInfo", !store.state.showInfo);
+    store.commit("setShowInfo", !store.state.showInfo)
   } else {
-    tab.value = val;
+    tab.value = val
   }
 }
 
@@ -332,27 +347,27 @@ async function thumbnailUrl() {
     formatMimeType(entity.value.mime_type),
     entity.value.name,
     entity.value.file_ext
-  );
-  thumbnailLink.value = result;
+  )
+  thumbnailLink.value = result
 }
 
-watch(
-  [entity, showInfoSidebar],
-  ([newEntity, newShowInfoSidebar], [oldEntity, oldShowInfoSidebar]) => {
-    if (
-      newEntity &&
-      typeof newEntity !== "number" &&
-      typeof newEntity !== "undefined"
-    ) {
-      if (newShowInfoSidebar == true) {
-        thumbnailUrl();
-        comments.fetch({ entity_name: newEntity.name });
-        entityTags.fetch({ entity: newEntity.name });
-        userTags.fetch();
-      }
+watch([entity, showInfoSidebar], ([newEntity, newShowInfoSidebar]) => {
+  if (
+    newEntity &&
+    typeof newEntity !== "number" &&
+    typeof newEntity !== "undefined"
+  ) {
+    if (newShowInfoSidebar == true) {
+      thumbnailUrl()
+      comments.fetch({ entity_name: newEntity.name })
+      entityTags.fetch({ entity: newEntity.name })
+      generalAccess.fetch({ entity_name: newEntity.name })
+      userList.fetch({ entity_name: newEntity.name })
+      groupList.fetch({ entity_name: newEntity.name })
+      userTags.fetch()
     }
   }
-);
+})
 
 async function postComment() {
   if (newComment.value.length) {
@@ -363,11 +378,11 @@ async function postComment() {
         content: newComment.value,
         comment_email: userId.value,
         comment_by: fullName.value,
-      });
-      newComment.value = "";
-      comments.fetch();
+      })
+      newComment.value = ""
+      comments.fetch()
     } catch (e) {
-      console.log(e);
+      console.log(e)
     }
   }
 }
@@ -376,39 +391,53 @@ let comments = createResource({
   url: "drive.api.files.list_entity_comments",
   onSuccess(data) {
     data.forEach((comment) => {
-      comment.creation = formatDate(comment.creation);
-    });
+      comment.creation = formatDate(comment.creation)
+    })
   },
   onError(error) {
     if (error.messages) {
-      console.log(error.messages);
+      console.log(error.messages)
     }
   },
   auto: false,
-});
+})
+
+const generalAccess = createResource({
+  url: "drive.api.permissions.get_general_access",
+  auto: false,
+})
+
+const userList = createResource({
+  url: "drive.api.permissions.get_shared_with_list",
+  auto: false,
+})
+
+const groupList = createResource({
+  url: "drive.api.permissions.get_shared_user_group_list",
+  auto: false,
+})
 
 let userTags = createResource({
   url: "drive.api.tags.get_user_tags",
   onError(error) {
     if (error.messages) {
-      console.log(error.messages);
+      console.log(error.messages)
     }
   },
   auto: false,
-});
+})
 
 let entityTags = createResource({
   url: "drive.api.tags.get_entity_tags",
   onError(error) {
     if (error.messages) {
-      console.log(error.messages);
+      console.log(error.messages)
     }
   },
   auto: false,
-});
-</script>
-<style scoped>
-.animate:active {
-  transform: scaleX(0.985) scaleY(0.985) translateY(0.5px);
+})
+
+function resize(e) {
+  e.target.style.height = `${e.target.scrollHeight}px`
 }
-</style>
+</script>

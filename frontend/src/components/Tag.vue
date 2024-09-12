@@ -1,20 +1,64 @@
 <template>
-  <Popover transition="default">
+  <div
+    class="inline-flex gap-1 items-center justify-center text-gray-800 border hover:bg-gray-200 h-7 text-base px-2 rounded group"
+  >
+    <button
+      v-if="entity.owner === 'You'"
+      class="hidden group-hover:block"
+      icon="x"
+      @click="$resources.removeTag.submit()"
+    >
+      <FeatherIcon
+        class="my-auto h-4 w-4 stroke-2"
+        name="x"
+        @click="$resources.removeTag.submit()"
+      />
+    </button>
+    <svg
+      :class="entity.owner === 'You' ? 'block group-hover:hidden' : 'block'"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle
+        cx="8"
+        cy="8"
+        r="4.5"
+        fill="transparent"
+        :stroke="tag.color"
+        stroke-width="3"
+      />
+    </svg>
+
+    <span class="text-base text-gray-800">
+      {{ tag.title }}
+    </span>
+  </div>
+</template>
+
+<!--  <Popover transition="default">
     <template #target="{ togglePopover }">
       <Badge
-        class="text-xs font-medium px-2"
+        class="text-base font-medium px-2"
         variant="subtle"
         :theme="`${tag.color}`"
         :style="{
-          cursor: entity.owner === 'Me' ? 'pointer' : 'default',
+          cursor: entity.owner === 'You' ? 'pointer' : 'default',
         }"
-        @click="if (entity.owner === 'Me') togglePopover();">
-        {{ `${tag.title}` }}
+        @click="
+          if (entity.owner === 'You');
+          togglePopover()
+        "
+      >
+        <span class="text-sm">{{ `${tag.title}` }}</span>
         <FeatherIcon
-          v-if="entity.owner === 'Me'"
-          @click="$resources.removeTag.submit()"
+          v-if="entity.owner === 'You'"
           class="my-auto h-3 stroke-2"
-          name="x" />
+          name="x"
+          @click="$resources.removeTag.submit()"
+        />
       </Badge>
     </template>
     <template #body-main="{ togglePopover }">
@@ -23,15 +67,18 @@
           placement="right"
           trigger="hover"
           :hover-delay="0.5"
-          :leave-delay="0.6">
+          :leave-delay="0.6"
+        >
           <template #target>
             <div
-              class="hover:bg-gray-100 cursor-pointer rounded flex items-center px-1.5 py-1 w-24">
+              class="hover:bg-gray-100 cursor-pointer rounded flex items-center px-1.5 py-1 w-24"
+            >
               <FeatherIcon name="droplet" class="w-4 h-4 text-gray-700 mr-1" />
               <div class="text-gray-800 text-base">Color</div>
               <FeatherIcon
                 name="chevron-right"
-                class="w-4 h-4 text-gray-700 ml-auto" />
+                class="w-4 h-4 text-gray-700 ml-auto"
+              />
             </div>
           </template>
           <template #body-main="{ togglePopover: toggleColors }">
@@ -46,9 +93,10 @@
                   $resources.updateColor.submit({
                     tag: tag.name,
                     color: color,
-                  });
-                  toggleColors();
-                " />
+                  }),
+                    toggleColors()
+                "
+              />
             </div>
           </template>
         </Popover>
@@ -56,20 +104,17 @@
           v-for="item in tagActions"
           :key="item"
           class="hover:bg-gray-100 cursor-pointer rounded flex items-center px-1.5 py-1 w-24"
-          @click="
-            item.handler();
-            togglePopover();
-          ">
+          @click="item.handler(), togglePopover()"
+        >
           <FeatherIcon :name="item.icon" class="w-4 h-4 text-gray-700 mr-1" />
           <div class="text-gray-800 text-base">{{ item.label }}</div>
         </div>
       </div>
     </template>
-  </Popover>
-</template>
+  </Popover> -->
 
 <script>
-import { Badge, Popover, FeatherIcon } from "frappe-ui";
+import { Badge, Popover, FeatherIcon } from "frappe-ui"
 
 export default {
   name: "Tag",
@@ -103,11 +148,11 @@ export default {
           label: "Delete",
           icon: "trash-2",
           handler: () => {
-            this.$resources.deleteTag.submit();
+            this.$resources.deleteTag.submit()
           },
         },
       ],
-    };
+    }
   },
 
   resources: {
@@ -115,9 +160,9 @@ export default {
       return {
         url: "drive.api.tags.update_tag_color",
         onSuccess() {
-          this.$emit("success");
+          this.$emit("success")
         },
-      };
+      }
     },
 
     removeTag() {
@@ -128,9 +173,9 @@ export default {
           tag: this.tag.name,
         },
         onSuccess() {
-          this.$emit("success");
+          this.$emit("success")
         },
-      };
+      }
     },
 
     deleteTag() {
@@ -140,10 +185,10 @@ export default {
           tag: this.tag.name,
         },
         onSuccess() {
-          this.$emit("success");
+          this.$emit("success")
         },
-      };
+      }
     },
   },
-};
+}
 </script>

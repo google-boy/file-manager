@@ -13,6 +13,17 @@ website_route_rules = [
     {"from_route": "/drive/<path:app_path>", "to_route": "drive"},
 ]
 
+add_to_apps_screen = [
+    {
+        "name": "drive",
+        "logo": "assets/drive/frontend/favicon-310x310.png",
+        "title": "Drive",
+        "route": "/drive",
+        "has_permission": "drive.api.permissions.has_app_permission",
+    }
+]
+
+
 # Includes in <head>
 # ------------------
 
@@ -22,7 +33,7 @@ website_route_rules = [
 
 # include js, css files in header of web template
 # web_include_css = "/assets/drive/css/drive.css"
-web_include_js = "/assets/drive/js/drive.js"
+# web_include_js = "/assets/drive/js/drive.js"
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "drive/public/scss/website"
@@ -44,7 +55,7 @@ web_include_js = "/assets/drive/js/drive.js"
 # ----------
 
 # application home page (will override Website Settings)
-home_page = "drive"
+# home_page = "drive"
 
 # website user home page (by Role)
 # role_home_page = {
@@ -70,7 +81,7 @@ home_page = "drive"
 # ------------
 
 # before_install = "drive.install.before_install"
-# after_install = "drive.install.after_install"
+after_install = "drive.install.after_install"
 
 # Uninstallation
 # ------------
@@ -92,6 +103,14 @@ home_page = "drive"
 # 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
 # }
 #
+
+permission_query_conditions = {
+    "Drive Entity": "drive.overrides.filter_drive_entity",
+    "Drive Document": "drive.overrides.filter_drive_document",
+    "Drive Favourite": "drive.overrides.filter_drive_favourite",
+    "Drive Entity Log": "drive.overrides.filter_drive_recent",
+    "Drive Notification": "drive.overrides.filter_drive_notif",
+}
 
 has_permission = {
     "Drive Entity": "drive.overrides.user_has_permission",
@@ -181,9 +200,3 @@ scheduler_events = {
 # auth_hooks = [
 # 	"drive.auth.validate"
 # ]
-
-website_redirects = [
-    {"source": "/", "target": "/drive"},
-    {"source": "/me", "target": "/drive/home"},
-    {"source": "/login", "target": "/drive/login"},
-]

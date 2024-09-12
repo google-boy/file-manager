@@ -4,17 +4,20 @@
       <div class="flex items-center justify-center">
         <Input
           ref="input"
-          class="w-full"
           v-model="newName"
+          class="w-full"
           type="text"
-          @keyup.enter="$resources.rename.submit" />
-        <Badge
+          @keyup.enter="$resources.rename.submit"
+        />
+        <span
           v-if="entity.file_ext"
           :variant="'subtle'"
           theme="gray"
           size="sm"
-          class="ml-2"
-          :label="entity.file_ext"></Badge>
+          class="form-input font-medium ml-2 text-gray-700 border-gray-100"
+        >
+          {{ entity.file_ext.toUpperCase().slice(1) }}
+        </span>
       </div>
       <ErrorMessage class="mt-2" :message="errorMessage" />
       <div class="flex mt-8">
@@ -22,7 +25,8 @@
           variant="solid"
           class="w-full"
           :loading="$resources.rename.loading"
-          @click="$resources.rename.submit">
+          @click="$resources.rename.submit"
+        >
           Rename
         </Button>
       </div>
@@ -31,10 +35,12 @@
 </template>
 
 <script>
-import { ref } from "vue";
-import { Dialog, Input, ErrorMessage, Badge } from "frappe-ui";
-import { useFocus } from "@vueuse/core";
-import { formatSize, formatDate } from "@/utils/format";
+import { ref } from "vue"
+import { Dialog, Input, ErrorMessage, Badge } from "frappe-ui"
+import { useFocus } from "@vueuse/core"
+import { useRoute } from "vue-router"
+import { useStore } from "vuex"
+import { toast } from "../utils/toasts.js"
 
 export default {
   name: "RenameDialog",
@@ -43,14 +49,6 @@ export default {
     Input,
     ErrorMessage,
     Badge,
-  },
-  setup() {
-    const input = ref();
-    const { focused } = useFocus(input, { initialValue: true });
-    return {
-      input,
-      focused,
-    };
   },
   props: {
     modelValue: {
@@ -64,33 +62,55 @@ export default {
     },
   },
   emits: ["update:modelValue", "success"],
+  setup(props) {
+    const newName = ref("")
+    const route = useRoute()
+    const store = useStore()
+    let parsedName = ""
+    if (props.entity?.is_group || props.entity?.document) {
+      newName.value = props.entity.title
+      if (route.meta.documentPage) {
+        store.state.entityInfo[0].title = newName.value
+      }
+    } else {
+      parsedName = props.entity?.title.split(".").slice(0, -1).join(".")
+    }
+    newName.value = parsedName?.length > 1 ? parsedName : props.entity?.title
+    const input = ref()
+    const { focused } = useFocus(input, { initialValue: true })
+    return {
+      input,
+      focused,
+      newName,
+    }
+  },
   data() {
     return {
-      newName: "",
       errorMessage: "",
       extension: "",
-    };
+    }
   },
   computed: {
     entityName() {
-      return this.entity?.name;
+      return this.entity?.name
     },
     fullName() {
+      let trimmed_name = this.newName.trim()
       if (this.entity?.file_ext) {
-        return this.newName + this.entity.file_ext;
+        return trimmed_name + this.entity.file_ext
       } else {
-        return this.newName;
+        return trimmed_name
       }
     },
     open: {
       get() {
-        return this.modelValue;
+        return this.modelValue
       },
       set(value) {
-        this.$emit("update:modelValue", value);
+        this.$emit("update:modelValue", value)
         if (!value) {
-          this.newName = "";
-          this.errorMessage = "";
+          this.newName = ""
+          this.errorMessage = ""
         }
       },
     },
@@ -106,38 +126,27 @@ export default {
           new_title: this.fullName,
         },
         onSuccess(data) {
-          this.newName = "";
-          this.extension = "";
-          this.errorMessage = "";
-          data.size_in_bytes = data.file_size;
-          data.file_size = formatSize(data.file_size);
-          data.modified = formatDate(data.modified);
-          data.creation = formatDate(data.creation);
-          data.owner =
-            data.owner === this.$store.state.auth.user_id ? "Me" : entity.owner;
-          data.is_group
-            ? this.$store.commit("setCurrentFolder", [data])
-            : this.$store.commit("setEntityInfo", [data]);
-          this.$emit("success", data);
+          toast({
+            title: `Renamed ${this.$store.state.entityInfo[0].title} to ${this.newName}`,
+            position: "bottom-right",
+            timeout: 2,
+          })
+          this.$store.state.entityInfo[0].title = data.title
+          this.$store.state.passiveRename = false
+          this.$emit("success", data)
+          this.newName = ""
+          this.extension = ""
+          this.errorMessage = ""
         },
         onError(error) {
           if (error.messages) {
-            this.errorMessage = error.messages.join("\n");
+            this.errorMessage = error.messages.join("\n")
           } else {
-            this.errorMessage = error.message;
+            this.errorMessage = error.message
           }
         },
-      };
+      }
     },
   },
-  created() {
-    let parsedName = "";
-    if (this.entity?.is_group || this.entity?.document) {
-      this.newName = this.entity.title;
-    } else {
-      parsedName = this.entity?.title.split(".").slice(0, -1).join(".");
-    }
-    this.newName = parsedName?.length > 1 ? parsedName : this.entity?.title;
-  },
-};
+}
 </script>

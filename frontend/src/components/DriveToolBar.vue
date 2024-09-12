@@ -2,97 +2,148 @@
   <div
     ondragstart="return false;"
     ondrop="return false;"
-    class="mb-2 min-h-8 flex gap-3 flex-wrap justify-end items-center w-full">
-    <div class="flex gap-3 w-full justify-end">
+    class="flex gap-x-3 flex-wrap justify-start items-center w-full min-h-8 mb-6"
+  >
+    <div class="flex gap-3 w-full justify-start items-center flex-wrap">
       <div
         v-if="$route.name === 'Shared'"
-        class="mr-auto bg-gray-100 rounded-[10px] p-0.5 space-x-0.5 h-8 flex">
+        class="bg-gray-100 rounded-[10px] space-x-0.5 h-7 flex items-center px-0.5 py-1"
+      >
         <Button
           variant="ghost"
-          class="animate h-7 text-gray-900 rounded-[7px] px-2 py-1.5 leading-none transition-colors focus:outline-none"
-          :class="[$store.state.shareView === 'with' ? 'bg-white shadow' : '']"
-          @click="$store.commit('toggleShareView', 'with')">
-          Shared with Me
+          class="max-h-6 leading-none transition-colors focus:outline-none"
+          :class="[
+            $store.state.shareView === 'with'
+              ? 'bg-white shadow-sm hover:bg-white active:bg-white'
+              : '',
+          ]"
+          @click="$store.commit('toggleShareView', 'with')"
+        >
+          Shared with You
         </Button>
         <Button
           variant="ghost"
-          class="animate h-7 text-gray-900 rounded-[7px] px-2 py-1.5 leading-none transition-colors focus:outline-none"
-          :class="[$store.state.shareView === 'by' ? 'bg-white shadow' : '']"
-          @click="$store.commit('toggleShareView', 'by')">
-          Shared by Me
+          class="max-h-6 leading-none transition-colors focus:outline-none"
+          :class="[
+            $store.state.shareView === 'by'
+              ? 'bg-white shadow-sm hover:bg-white active:bg-white'
+              : '',
+          ]"
+          @click="$store.commit('toggleShareView', 'by')"
+        >
+          Shared by You
         </Button>
       </div>
-      <!-- <Dropdown
-        v-if="actionItems.length > 0"
-        :options="actionItems"
-        placement="left"
-        class="basis-5/12 lg:basis-auto">
+      <Dropdown :options="filterItems" placement="left">
         <Button
-          class="text-sm h-8 w-full"
-          icon-right="chevron-down"
-          :loading="actionLoading">
-          <span class="hidden md:inline">Actions</span>
+          >Filter
+          <template #prefix>
+            <Filter />
+          </template>
+          <template #suffix>
+            <ChevronDown />
+          </template>
         </Button>
-      </Dropdown> -->
-      <Dropdown
-        v-if="columnHeaders"
-        :options="orderByItems"
-        placement="right"
-        class="basis-5/12 basis-auto">
-        <div class="flex items-center whitespace-nowrap">
+      </Dropdown>
+      <div class="flex flex-wrap items-start justify-start gap-1">
+        <div v-for="(item, index) in activeFilters" :key="index">
+          <div class="flex items-center border rounded pl-2 py-1 h-7 text-base">
+            {{ item }}
+            <Button
+              variant="minimal"
+              @click="$store.state.activeFilters.splice(index, 1)"
+            >
+              <template #icon>
+                <FeatherIcon class="h-3 w-3" name="x" />
+              </template>
+            </Button>
+          </div>
+        </div>
+      </div>
+      <div class="ml-auto flex gap-x-1 items-center">
+        <Dropdown
+          v-if="columnHeaders"
+          :options="orderByItems"
+          placement="right"
+          class="basis-auto"
+        >
+          <div class="flex items-center whitespace-nowrap">
+            <Button
+              class="text-sm h-7 border-r border-slate-200 rounded-r-none"
+              @click.stop="toggleAscending"
+            >
+              <DownArrow
+                :class="{ '[transform:rotateX(180deg)]': ascending }"
+                class="h-3.5"
+              />
+            </Button>
+            <Button class="text-sm h-7 rounded-l-none flex-1 md:block">
+              {{ orderByLabel }}
+            </Button>
+          </div>
+        </Dropdown>
+        <div
+          class="bg-gray-100 rounded-md space-x-0.5 h-7 px-0.5 py-1 flex items-center"
+        >
           <Button
-            class="text-sm h-8 px-2 border-r border-slate-200 rounded-r-none"
-            @click.stop="toggleAscending">
-            <svg
-              class="h-4 w-4 stroke-current inline-block"
-              xmlns="http://www.w3.org/2000/svg">
-              <path
-                :d="
-                  ascending
-                    ? 'M1.75 3.25h9m-9 4h6m-6 4h4m8.5-3.5l-2-2-2 2m2 4v-6'
-                    : 'M1.75 3.25h9m-9 4h6m-6 4h4m4.5-.5l2 2 2-2m-2 1v-6'
-                "
-                stroke-miterlimit="10"
-                stroke-linecap="round"
-                stroke-linejoin="round"></path>
-            </svg>
+            variant="ghost"
+            class="max-h-6 leading-none transition-colors focus:outline-none"
+            :class="[
+              $store.state.view === 'grid'
+                ? 'bg-white shadow-sm hover:bg-white active:bg-white'
+                : '',
+            ]"
+            @click="$store.commit('toggleView', 'grid')"
+          >
+            <ViewGrid />
           </Button>
-          <Button class="text-sm h-8 rounded-l-none flex-1 hidden md:block">
-            Sort by {{ orderByLabel.toLowerCase() }}
-          </Button>
-          <Button class="text-sm h-8 rounded-l-none flex-1 md:hidden">
-            {{ orderByLabel }}
+          <Button
+            variant="ghost"
+            class="max-h-6 leading-none transition-colors focus:outline-none"
+            :class="[
+              $store.state.view === 'list'
+                ? 'bg-white shadow-sm hover:bg-white active:bg-white'
+                : '',
+            ]"
+            @click="$store.commit('toggleView', 'list')"
+          >
+            <ViewList />
           </Button>
         </div>
-      </Dropdown>
-      <div class="bg-gray-100 rounded-md p-0.5 space-x-0.5 h-8 flex">
-        <Button
-          variant="ghost"
-          icon="grid"
-          class="animate h-7 text-gray-900 rounded-[7px] px-2 py-1.5 leading-none transition-colors focus:outline-none"
-          :class="[$store.state.view === 'grid' ? 'bg-white shadow' : '']"
-          @click="$store.commit('toggleView', 'grid')"></Button>
-        <Button
-          variant="ghost"
-          icon="list"
-          class="animate h-7 text-gray-900 rounded-[7px] px-2 py-1.5 leading-none transition-colors focus:outline-none"
-          :class="[$store.state.view === 'list' ? 'bg-white shadow' : '']"
-          @click="$store.commit('toggleView', 'list')"></Button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { Button, Dropdown } from "frappe-ui";
-import Breadcrumbs from "@/components/Breadcrumbs.vue";
+import { FeatherIcon, Button, Dropdown } from "frappe-ui"
+import ViewGrid from "@/components/EspressoIcons/ViewGrid.vue"
+import ViewList from "@/components/EspressoIcons/ViewList.vue"
+import DownArrow from "./EspressoIcons/DownArrow.vue"
+import Filter from "./EspressoIcons/Filter.vue"
+import ChevronDown from "./EspressoIcons/ChevronDown.vue"
+import Folder from "./MimeIcons/Folder.vue"
+import Archive from "./MimeIcons/Archive.vue"
+import Document from "./MimeIcons/Document.vue"
+import Spreadsheet from "./MimeIcons/Spreadsheet.vue"
+import Presentation from "./MimeIcons/Presentation.vue"
+import Audio from "./MimeIcons/Audio.vue"
+import Image from "./MimeIcons/Image.vue"
+import Video from "./MimeIcons/Video.vue"
+import PDF from "./MimeIcons/PDF.vue"
+import Unknown from "./MimeIcons/Unknown.vue"
 
 export default {
   name: "DriveToolBar",
   components: {
     Button,
-    Breadcrumbs,
     Dropdown,
+    ViewList,
+    ViewGrid,
+    DownArrow,
+    Filter,
+    ChevronDown,
+    FeatherIcon,
   },
   props: {
     breadcrumbs: {
@@ -113,14 +164,17 @@ export default {
     },
   },
   computed: {
+    activeFilters() {
+      return this.$store.state.activeFilters
+    },
     orderByField() {
-      return this.$store.state.sortOrder.field;
+      return this.$store.state.sortOrder.field
     },
     orderByLabel() {
-      return this.$store.state.sortOrder.label;
+      return this.$store.state.sortOrder.label
     },
     ascending() {
-      return this.$store.state.sortOrder.ascending;
+      return this.$store.state.sortOrder.ascending
     },
     orderByItems() {
       return this.columnHeaders.map((header) => ({
@@ -130,14 +184,89 @@ export default {
             field: header.field,
             label: header.label,
             ascending: this.ascending,
-          });
+          })
         },
-      }));
+      }))
+    },
+    filterItems() {
+      return [
+        {
+          label: "Folder",
+          icon: Folder,
+          onClick: () => {
+            // toggle folders only
+            this.$store.state.activeFilters.push("Folder")
+          },
+        },
+        {
+          label: "Image",
+          icon: Image,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Image")
+          },
+        },
+        {
+          label: "Audio",
+          icon: Audio,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Audio")
+          },
+        },
+        {
+          label: "Video",
+          icon: Video,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Video")
+          },
+        },
+        {
+          label: "PDF",
+          icon: PDF,
+          onClick: () => {
+            this.$store.state.activeFilters.push("PDF")
+          },
+        },
+        {
+          label: "Document",
+          icon: Document,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Document")
+          },
+        },
+        {
+          label: "Spreadsheet",
+          icon: Spreadsheet,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Spreadsheet")
+          },
+        },
+        {
+          label: "Archive",
+          icon: Archive,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Archive")
+          },
+        },
+        {
+          label: "Presentation",
+          icon: Presentation,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Presentation")
+          },
+        },
+        {
+          label: "Unknown",
+          icon: Unknown,
+          onClick: () => {
+            this.$store.state.activeFilters.push("Unknown")
+          },
+        },
+      ].filter((item) => !this.activeFilters.includes(item.label))
     },
   },
   mounted() {
     for (let element of this.$el.getElementsByTagName("button")) {
-      element.classList.remove("focus:ring-2", "focus:ring-offset-2");
+      element.classList.remove("focus:ring-2", "focus:ring-offset-2")
     }
   },
   methods: {
@@ -146,13 +275,9 @@ export default {
         field: this.orderByField,
         label: this.orderByLabel,
         ascending: !this.ascending,
-      });
+      })
     },
   },
-};
-</script>
-<style scoped>
-.animate:active {
-  transform: scaleX(0.985) scaleY(0.985) translateY(0.5px);
 }
-</style>
+</script>
+./EspressoIcons/Sort.vue

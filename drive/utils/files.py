@@ -1,5 +1,6 @@
 import frappe
 import os
+import mimetypes
 from pathlib import Path
 import hashlib
 from PIL import Image, ImageOps
@@ -70,7 +71,7 @@ def _get_user_directory_name(user=None):
 
 
 @frappe.whitelist()
-def get_new_title(entity, parent_name):
+def get_new_title(title, parent_name, document=False, folder=False):
     """
     Returns new title for an entity if same title exists for another entity at the same level
 
@@ -78,26 +79,33 @@ def get_new_title(entity, parent_name):
     :param parent_entity: Parent entity of entity to be renamed (if at all)
     :return: String with new title
     """
+    entity_title, entity_ext = os.path.splitext(title)
 
-    entity_title, entity_ext = os.path.splitext(entity)
+    filters = {
+        "is_active": 1,
+        "parent_drive_entity": parent_name,
+        "title": ["like", f"{entity_title}%{entity_ext}"],
+    }
+
+    if entity_ext:
+        mime_type = mimetypes.guess_type(title)
+        filters["mime_type"] = mime_type[0]
+
+    if document:
+        mime_type = "frappe_doc"
+
+    if folder:
+        filters["is_group"] = 1
+
     sibling_entity_titles = frappe.db.get_list(
         "Drive Entity",
-        filters={
-            "parent_drive_entity": parent_name,
-            "title": ["like", f"{entity_title}%{entity_ext}"],
-        },
+        filters=filters,
         pluck="title",
     )
 
-    if entity not in sibling_entity_titles:
-        return entity
-
-    i = 1
-    while True:
-        new_title = f"{entity_title} ({i}){entity_ext}"
-        if new_title not in sibling_entity_titles:
-            return new_title
-        i += 1
+    if not sibling_entity_titles:
+        return title
+    return f"{entity_title} ({len(sibling_entity_titles)}){entity_ext}"
 
 
 def create_user_thumbnails_directory():
@@ -139,8 +147,8 @@ def create_thumbnail(entity_name, path, mime_type):
                     image_path = path
                     with Image.open(image_path).convert("RGB") as image:
                         image = ImageOps.exif_transpose(image)
-                        image.thumbnail((250, 250))
-                        image.save(str(thumbnail_savepath) + ".thumbnail", format="JPEG")
+                        image.thumbnail((512, 512))
+                        image.save(str(thumbnail_savepath) + ".thumbnail", format="webp")
                     break
                 except Exception as e:
                     print(f"Failed to create thumbnail. Retry {retry_count+1}/{max_retries}")
@@ -161,7 +169,10 @@ def create_thumbnail(entity_name, path, mime_type):
                     ret, frame = cap.read()
                     cap.release()
                     _, thumbnail_encoded = cv2.imencode(
-                        ".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 30]
+                        # ".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 30]
+                        ".webp",
+                        frame,
+                        [int(cv2.IMWRITE_WEBP_QUALITY), 50],
                     )
                     with open(str(thumbnail_savepath) + ".thumbnail", "wb") as f:
                         f.write(thumbnail_encoded)
